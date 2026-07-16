@@ -1,8 +1,9 @@
 """
-Generator Modul Ajar berbasis AI - Versi Lengkap (Semua Jenjang + KMA 1503/2025)
+Generator Modul Ajar berbasis AI - Fokus KBC & KMA 1503/2025
 --------------------------------------------------------------------------------
 Mendukung RA/TK hingga SMA/MA, referensi KMA 1503 Tahun 2025, Prompt Chaining, 
 Desain Tabel Berwarna, dan Tanda Tangan Pengesahan.
+Fokus murni pada Kurikulum Merdeka Deep Learning Berbasis Cinta (KBC).
 """
 
 import io
@@ -92,9 +93,9 @@ def call_ai(prompt: str, temperature=0.2) -> dict:
 # ==============================================================================
 
 def prompt_step_1(form: dict) -> str:
-    return f"""Kamu adalah pakar kurikulum Madrasah (RA/MI/MTs/MA) di Indonesia. Buat Bagian A (Identifikasi) dan C (Desain Pembelajaran) 
+    return f"""Kamu adalah pakar Kurikulum Merdeka di Indonesia. Buat Bagian A (Identifikasi) dan C (Desain Pembelajaran) 
 untuk Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik: {form['bab']}.
-Tulis detail mendalam sesuai Kurikulum Berbasis Cinta & Pendekatan Deep Learning.
+Fokuskan materi secara eksklusif pada Kurikulum Merdeka Deep Learning Berbasis Cinta (KBC).
 PENTING: Pada bagian "capaian_pembelajaran", WAJIB merujuk dan menyebutkan secara eksplisit sesuai "KMA Nomor 1503 Tahun 2025".
 
 Balas HANYA dengan JSON valid sesuai skema berikut:
@@ -118,7 +119,9 @@ def prompt_step_2(form: dict, step1_data: dict) -> str:
     n = form["jumlah_pertemuan"]
     return f"""Melanjutkan modul {form['mapel']} {form['kelas']} bab {form['bab']}.
 Buat Pengalaman Belajar untuk TEPAT {n} pertemuan secara logis berurutan.
-Integrasikan sintak Problem Based Learning (PBL) dan prinsip Deep Learning (Mindful, Meaningful, Joyful) ke dalam kalimat kegiatannya.
+Fokuskan secara utuh pada Kurikulum Merdeka Deep Learning Berbasis Cinta (KBC).
+Integrasikan prinsip Deep Learning (Mindful, Meaningful, Joyful) secara jelas ke dalam kalimat kegiatannya.
+
 Balas HANYA dengan JSON valid sesuai skema berikut:
 {{
   "pertemuan": [
@@ -135,6 +138,8 @@ Balas HANYA dengan JSON valid sesuai skema berikut:
 def prompt_step_3(form: dict, step2_data: dict) -> str:
     return f"""Tahap akhir penyusunan modul {form['mapel']} bab {form['bab']}. 
 Buat detail Lampiran berdasarkan pertemuan yang telah disusun.
+Fokuskan pada pendekatan Kurikulum Merdeka Deep Learning Berbasis Cinta.
+
 Balas HANYA dengan JSON valid sesuai skema berikut:
 {{
   "asesmen_awal": ["string", "string"],
@@ -255,11 +260,9 @@ def build_docx(form: dict, full_data: dict) -> bytes:
         ("Semester", form["semester"]),
         ("Alokasi Waktu", f"{len(d2['pertemuan'])} Pertemuan x {form['alokasi']}"),
         ("Bab / Topik", form["bab"]),
-        ("Model Pembelajaran", form["model"]),
-        ("Metode Pembelajaran", form["metode"]),
+        ("Tahun Pelajaran", form["tahun_pelajaran"]),
         ("Penyusun", form["penyusun"]),
         ("Sekolah", form["sekolah"]),
-        ("Tahun Pelajaran", form["tahun_pelajaran"]),
     ]:
         add_field_row(identity, label, value)
     doc.add_paragraph()
@@ -327,7 +330,7 @@ def build_docx(form: dict, full_data: dict) -> bytes:
     add_field_row(refleksi, "Pertanyaan Refleksi", d3["refleksi"])
     
     # --- TANDA TANGAN (KOLOM PENGESAHAN) ---
-    doc.add_paragraph() # Spasi sebelum tanda tangan
+    doc.add_paragraph() 
     doc.add_paragraph()
     
     # Membuat tabel transparan (tanpa garis) untuk tanda tangan bersebelahan
@@ -357,24 +360,19 @@ def build_docx(form: dict, full_data: dict) -> bytes:
 # ==============================================================================
 # UI STREAMLIT
 # ==============================================================================
-st.title("📘 Generator Modul Ajar (KMA 1503 Tahun 2025)")
+st.title("📘 Generator Modul Ajar (Fokus KBC & KMA 1503/2025)")
 
 with st.form("form_modul"):
     st.subheader("Data Modul")
     col1, col2 = st.columns(2)
     with col1:
-        mapel = st.text_input("Mata Pelajaran", placeholder="Bahasa Indonesia")
-        bab = st.text_input("Bab / Topik", placeholder="Bab 1: Anak-Anak yang Mengubah Dunia")
-        
-        # Dropdown Kelas yang sudah mencakup RA hingga MA/SMK
-        kelas = st.selectbox("Jenjang / Kelas", list(JENJANG_FASE.keys()))
-        
+        mapel = st.text_input("Mata Pelajaran", placeholder="Matematika")
+        bab = st.text_input("Bab / Topik", placeholder="Bab 1: Pecahan dan Desimal")
+        kelas = st.selectbox("Jenjang / Kelas", list(JENJANG_FASE.keys()), index=6) # Default Kelas 6
         semester = st.selectbox("Semester", ["1 (Satu)", "2 (Dua)"])
-        jumlah_pertemuan = st.number_input("Jumlah Pertemuan", min_value=1, max_value=8, value=4)
     with col2:
+        jumlah_pertemuan = st.number_input("Jumlah Pertemuan", min_value=1, max_value=8, value=2)
         alokasi = st.text_input("Alokasi Waktu per Pertemuan", value="4 JP x 35 menit")
-        model_pembelajaran = st.text_input("Model Pembelajaran", value="PBL (Problem Based Learning)")
-        metode = st.text_input("Metode Pembelajaran", value="Ceramah Interaktif, Diskusi Kelompok, Tanya Jawab")
         sekolah = st.text_input("Sekolah", placeholder="MI Miftahussalam")
         tahun_pelajaran = st.text_input("Tahun Pelajaran", value="2026/2027")
 
@@ -404,8 +402,7 @@ if submitted:
         form = dict(
             mapel=mapel, bab=bab, kelas=kelas, semester=semester,
             jumlah_pertemuan=int(jumlah_pertemuan), alokasi=alokasi,
-            model=model_pembelajaran, metode=metode, penyusun=penyusun,
-            sekolah=sekolah, tahun_pelajaran=tahun_pelajaran,
+            penyusun=penyusun, sekolah=sekolah, tahun_pelajaran=tahun_pelajaran,
             titimangsa=titimangsa, kepala_madrasah=kepala_madrasah
         )
         
@@ -417,7 +414,7 @@ if submitted:
             d1 = call_ai(prompt_step_1(form))
             progress_bar.progress(33)
             
-            status_text.write("⏳ Langkah 2/3: Merancang Pengalaman Belajar & PBL...")
+            status_text.write("⏳ Langkah 2/3: Merancang Pengalaman Belajar (Mindful, Meaningful, Joyful)...")
             d2 = call_ai(prompt_step_2(form, d1))
             progress_bar.progress(66)
             
@@ -453,7 +450,7 @@ if "full_data" in st.session_state:
     st.download_button(
         "⬇️ Unduh sebagai Word (.docx)",
         data=docx_bytes,
-        file_name=f"Modul_Ajar_{safe_mapel}_{safe_kelas}.docx",
+        file_name=f"Modul_Ajar_KBC_{safe_mapel}_{safe_kelas}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         use_container_width=True,
     )
