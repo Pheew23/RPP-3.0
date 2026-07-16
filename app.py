@@ -525,32 +525,50 @@ if submitted:
         
         try:
             for tipe in pilihan_dokumen:
-                st.write(f"📄 **Memproses {tipe}...**")
                 if tipe == "Modul Ajar":
+                    st.write("📘 **Memproses Modul Ajar...**")
+                    # Mengembalikan Progress Bar 3 Langkah
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    status_text.write("⏳ Langkah 1/3: Menyusun Identitas & Desain Pembelajaran...")
                     d1 = call_ai(prompt_step_1(form))
+                    progress_bar.progress(33)
+                    
+                    status_text.write("⏳ Langkah 2/3: Merancang Pengalaman Belajar (DL)...")
                     d2 = call_ai(prompt_step_2(form, d1))
+                    progress_bar.progress(66)
+                    
+                    status_text.write("⏳ Langkah 3/3: Menyiapkan Asesmen & LKPD...")
                     d3 = call_ai(prompt_step_3(form, d2))
+                    progress_bar.progress(100)
+                    status_text.success("✅ Modul Ajar selesai!")
+                    
                     doc_bytes = build_modul_ajar(form, {"step1": d1, "step2": d2, "step3": d3})
-                elif tipe == "CP & ATP":
-                    ai_data = call_ai(prompt_cpatp(form))
-                    doc_bytes = build_cpatp(form, ai_data)
-                elif tipe == "Prota":
-                    ai_data = call_ai(prompt_prota(form))
-                    doc_bytes = build_prota(form, ai_data)
-                elif tipe == "Promes":
-                    ai_data = call_ai(prompt_promes(form))
-                    doc_bytes = build_promes(form, ai_data)
-                elif tipe == "Jurnal Mengajar":
-                    ai_data = call_ai(prompt_jurnal(form))
-                    doc_bytes = build_jurnal(form, ai_data)
                 
+                else:
+                    st.write(f"📄 **Memproses {tipe}...**")
+                    if tipe == "CP & ATP":
+                        ai_data = call_ai(prompt_cpatp(form))
+                        doc_bytes = build_cpatp(form, ai_data)
+                    elif tipe == "Prota":
+                        ai_data = call_ai(prompt_prota(form))
+                        doc_bytes = build_prota(form, ai_data)
+                    elif tipe == "Promes":
+                        ai_data = call_ai(prompt_promes(form))
+                        doc_bytes = build_promes(form, ai_data)
+                    elif tipe == "Jurnal Mengajar":
+                        ai_data = call_ai(prompt_jurnal(form))
+                        doc_bytes = build_jurnal(form, ai_data)
+                
+                # Eksekusi Auto-Download
                 safe_tipe = tipe.replace(" & ", "_").replace(" ", "_")
                 filename = f"{safe_tipe}_{safe_mapel}_{safe_kelas}.docx"
                 st.session_state["hasil_generate"][filename] = doc_bytes
                 trigger_download(doc_bytes, filename)
-                time.sleep(1.5)
+                time.sleep(1.5) # Jeda antar pop-up agar browser aman
             
-            st.success("✅ Semua dokumen berhasil disusun dan sedang diunduh!")
+            st.success("🎉 Semua dokumen berhasil disusun dan sedang diunduh!")
             
         except Exception as e:
             st.error(f"Terjadi kesalahan saat memproses data: {e}")
@@ -559,6 +577,6 @@ if submitted:
 
 if "hasil_generate" in st.session_state and st.session_state["hasil_generate"]:
     st.divider()
-    st.write("⬇️ **Tombol Unduh Manual:**")
+    st.write("⬇️ **Tombol Unduh Manual (Jika pop-up diblokir browser):**")
     for fname, fbytes in st.session_state["hasil_generate"].items():
         st.download_button(label=f"Unduh {fname}", data=fbytes, file_name=fname, mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
