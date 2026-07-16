@@ -501,7 +501,7 @@ def trigger_download(file_bytes, filename):
 # ==============================================================================
 # UI STREAMLIT
 # ==============================================================================
-st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR ")
+st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.3 ")
 st.markdown("*Berbasis Model Lagos AI 9.1*")
 
 with st.form("form_modul"):
@@ -525,7 +525,7 @@ with st.form("form_modul"):
 
     with col3:
         titimangsa = st.text_input("Titimangsa", value=titimangsa_otomatis)
-        penyusun = st.text_input("Penyusun (Guru)", placeholder="Erian Kurniawan")
+        penyusun = st.text_input("Penyusun (Guru)", placeholder="Erian Kurniawan, S.E")
     with col4:
         kepala_madrasah = st.text_input("Kepala Madrasah", placeholder="Drs. Andi Supriadi")
 
