@@ -422,7 +422,6 @@ def build_prota(form, ai_data):
         r = table.add_row().cells
         style_cell(r[0], row.get("no", ""), center=True); style_cell(r[1], row.get("elemen_cp", ""))
         style_cell(r[2], row.get("topik_tp", "")); style_cell(r[3], row.get("jp", ""), center=True)
-        style_cell(r[4], row.get("semester", ""), center=True)
     add_signatures(doc, form)
     buf = io.BytesIO(); doc.save(buf); buf.seek(0)
     return buf.getvalue()
