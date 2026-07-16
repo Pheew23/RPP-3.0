@@ -8,7 +8,7 @@ dengan fungsi ekspor DOCX yang mempertahankan tabel berwarna (banner & field).
 import io
 import json
 import re
-
+import datetime
 import streamlit as st
 from openai import OpenAI
 from docx import Document
@@ -381,13 +381,20 @@ if "full_data" in st.session_state:
     full_data = st.session_state["full_data"]
     
     st.divider()
-    st.subheader(f"🎉 Selesai! Pratinjau & Unduh Modul: {form['mapel']} \u2013 {form['bab']}")
+    st.subheader("Data Pengesahan (Tanda Tangan)")
+    col3, col4 = st.columns(2)
     
-    docx_bytes = build_docx(form, full_data)
-    st.download_button(
-        "⬇️ Unduh sebagai Word (.docx)",
-        data=docx_bytes,
-        file_name=f"Modul_Ajar_{form['mapel'].replace(' ', '_')}_Kelas{form['kelas']}.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        use_container_width=True,
-    )
+    # Logika untuk membuat tanggal otomatis berbahasa Indonesia
+    now = datetime.datetime.now()
+    bulan_indo = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", 
+                  "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+    nama_bulan = bulan_indo[now.month - 1]
+    
+    # Kamu bisa mengganti "Bogor" dengan nama kota default lain jika mau
+    titimangsa_otomatis = f"Bogor, {now.day} {nama_bulan} {now.year}"
+
+    with col3:
+        titimangsa = st.text_input("Titimangsa (Tempat, Waktu)", value=titimangsa_otomatis)
+        penyusun = st.text_input("Penyusun (Nama Guru)", placeholder="Mamik Muhapatin, S.Pd")
+    with col4:
+        kepala_madrasah = st.text_input("Nama Kepala Madrasah", placeholder="Drs. Andi Supriadi")
