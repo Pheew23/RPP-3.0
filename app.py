@@ -125,13 +125,20 @@ def call_ai(form: dict) -> dict:
     response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.6,
+        temperature=0.2, # Diatur lebih rendah agar AI lebih patuh pada format
         max_tokens=6000,
     )
     text = response.choices[0].message.content.strip()
     
-    # PERBAIKAN: Menggunakan regex untuk mengekstrak hanya format JSON
-    # Ini mencegah error jika AI memberikan output "Berikut adalah hasilnya: { ... }"
+    # Simpan teks asli ke session_state agar kita bisa mengintipnya jika error
+    st.session_state["raw_ai_output"] = text
+    
+    # Bersihkan markdown block (```json ... ```) yang sering ditambahkan AI
+    text = re.sub(r'^```json\s*', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    text = re.sub(r'^```\s*', '', text, flags=re.MULTILINE)
+    text = text.strip()
+    
+    # Tangkap hanya blok dari { sampai }
     match = re.search(r'\{.*\}', text, re.DOTALL)
     if match:
         text = match.group(0)
@@ -373,8 +380,11 @@ if submitted:
                 data = call_ai(form)
                 st.session_state["form"] = form
                 st.session_state["data"] = data
-            except json.JSONDecodeError:
-                st.error("AI mengembalikan format JSON yang tidak valid. Coba klik tombol sekali lagi.")
+            except json.JSONDecodeError as e:
+                st.error(f"AI mengembalikan format JSON yang tidak valid. Detail: {e}")
+                with st.expander("🔍 Lihat Hasil Mentah (Raw Output) AI untuk Debugging"):
+                    st.code(st.session_state.get("raw_ai_output", "Tidak ada data output."))
+                st.info("💡 Tips: Coba klik tombol buat lagi. Jika terus gagal, pertimbangkan untuk mengganti MODEL_NAME.")
             except Exception as e:
                 st.error(f"Gagal memanggil model NVIDIA: {e}")
 
