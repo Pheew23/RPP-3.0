@@ -105,7 +105,7 @@ def prompt_cpatp(form):
     return f"""Buat isi CP dan ATP Mapel {form['mapel']} {form['kelas']} Topik {form['bab']} berdasar KMA 1503/2025. Balas HANYA JSON: {{"rows": [{{"elemen": "str", "cp": "str", "tp": "str", "atp": "str", "jp": "str"}}]}}"""
 
 def prompt_prota(form):
-    return f"""Buat isi Program Tahunan selama 2 semester Ganjil & Genap Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}. Balas HANYA JSON: {{"rows": [{{"no": "1", "elemen_cp": "str", "topik_tp": "str", "jp": "str"}}]}}"""
+    return f"""Buat isi Program Tahunan Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}. Balas HANYA JSON: {{"rows": [{{"no": "1", "elemen_cp": "str", "topik_tp": "str", "jp": "str", "semester": "1"}}]}}"""
 
 def prompt_promes(form):
     is_sem1 = "1" in form['semester']
@@ -413,7 +413,7 @@ def build_prota(form, ai_data):
     create_header(doc, "PROGRAM TAHUNAN (PROTA)", form)
     table = doc.add_table(rows=1, cols=5)
     table.style = 'Table Grid'
-    headers = ["No", "Elemen / CP", "Topik / Tujuan Pembelajaran", "JP",]
+    headers = ["No", "Elemen / CP", "Topik / Tujuan Pembelajaran", "JP", "Semester"]
     for i, h in enumerate(headers):
         set_cell_background(table.cell(0, i), COLOR_TITLE)
         style_cell(table.cell(0, i), h, bold=True, color="FFFFFF", center=True)
@@ -422,6 +422,7 @@ def build_prota(form, ai_data):
         r = table.add_row().cells
         style_cell(r[0], row.get("no", ""), center=True); style_cell(r[1], row.get("elemen_cp", ""))
         style_cell(r[2], row.get("topik_tp", "")); style_cell(r[3], row.get("jp", ""), center=True)
+        style_cell(r[4], row.get("semester", ""), center=True)
     add_signatures(doc, form)
     buf = io.BytesIO(); doc.save(buf); buf.seek(0)
     return buf.getvalue()
