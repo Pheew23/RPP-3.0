@@ -105,7 +105,7 @@ def prompt_cpatp(form):
     return f"""Buat isi CP dan ATP Mapel {form['mapel']} {form['kelas']} Topik {form['bab']} berdasar KMA 1503/2025. Balas HANYA JSON: {{"rows": [{{"elemen": "str", "cp": "str", "tp": "str", "atp": "str", "jp": "str"}}]}}"""
 
 def prompt_prota(form):
-    return f"""Buat isi Program Tahunan 2 semester Ganjil & Genap Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}. Balas HANYA JSON: {{"rows": [{{"no": "1", "elemen_cp": "str", "topik_tp": "str", "jp": "str", "semester": "1"}}]}}"""
+    return f"""Buat isi Program Tahunan selama 2 semester Ganjil & Genap Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}. Balas HANYA JSON: {{"rows": [{{"no": "1", "elemen_cp": "str", "topik_tp": "str", "jp": "str", "semester": "1&2"}}]}}"""
 
 def prompt_promes(form):
     is_sem1 = "1" in form['semester']
