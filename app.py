@@ -531,12 +531,12 @@ with st.form("form_modul"):
 
     st.divider()
     pilihan_dokumen = st.multiselect(
-        "Pilih dokumen yang ingin di-generate otomatis:",
+        "Pilih dokumen yang ingin di-generate otomatis (Jangan di pilih semua ya, satu-satu cape akutu:",
         ["Modul Ajar", "CP & ATP", "Prota", "Promes", "Jurnal Mengajar"],
         default=["Modul Ajar"]
     )
 
-    submitted = st.form_submit_button("✨ Eksekusi & Generate (Auto-Download)", use_container_width=True)
+    submitted = st.form_submit_button("✨ Eksekusi & Generate (Auto-Download) Biasanya beres dalam Waktu 1 Menit", use_container_width=True)
 
 if submitted:
     if not (mapel and bab and penyusun and sekolah and kepala_madrasah):
@@ -561,15 +561,15 @@ if submitted:
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     
-                    status_text.write("⏳ Lagos AI Sedang Memasak : Langkah 1/3: Menyusun Identitas & Desain Pembelajaran...")
+                    status_text.write("⏳ Lagos AI Sedang Memasak : Langkah 1/3: Sabar ya...")
                     d1 = call_ai(prompt_step_1(form))
                     progress_bar.progress(33)
                     
-                    status_text.write("⏳ Lagos AI Sedang Memasak : Langkah 2/3: Merancang Pengalaman Belajar (Tabel 4 Kolom DL)...")
+                    status_text.write("⏳ Lagos AI Sedang Memasak : Langkah 2/3: Sebentar lagi kok...")
                     d2 = call_ai(prompt_step_2(form, d1))
                     progress_bar.progress(66)
                     
-                    status_text.write("⏳ Lagos AI Sedang Memasak : Langkah 3/3: Menyiapkan Asesmen, Rubrik, LKPD & Glosarium...")
+                    status_text.write("⏳ Lagos AI Sedang Memasak : Langkah 3/3: Beneran ini terakhir, Tunggu ya...")
                     d3 = call_ai(prompt_step_3(form, d2))
                     progress_bar.progress(100)
                     status_text.success("✅ Modul Ajar selesai!")
