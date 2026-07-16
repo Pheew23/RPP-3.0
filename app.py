@@ -1,14 +1,15 @@
 """
-Generator Modul Ajar berbasis AI - Versi Prompt Chaining + Desain Berwarna
---------------------------------------------------------------------------
-Menggabungkan pemanggilan AI bertahap agar isi detail & tidak error,
-dengan fungsi ekspor DOCX yang mempertahankan tabel berwarna (banner & field).
+Generator Modul Ajar berbasis AI - Versi Lengkap (Semua Jenjang + KMA 1503/2025)
+--------------------------------------------------------------------------------
+Mendukung RA/TK hingga SMA/MA, referensi KMA 1503 Tahun 2025, Prompt Chaining, 
+Desain Tabel Berwarna, dan Tanda Tangan Pengesahan.
 """
 
 import io
 import json
 import re
 import datetime
+
 import streamlit as st
 from openai import OpenAI
 from docx import Document
@@ -19,7 +20,7 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
 # ==============================================================================
-# PALET WARNA (DIKEMBALIKAN SEPERTI KODE ASLI)
+# PALET WARNA
 # ==============================================================================
 COLOR_TITLE = "1F4E79"       
 COLOR_IDENTITY_HEAD = "2E75B6"   
@@ -39,7 +40,22 @@ COLOR_REFLEKSI = "2E75B6"
 MODEL_NAME = "nvidia/nemotron-3-ultra-550b-a55b"
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
-FASE_MAP = {1: "A", 2: "A", 3: "B", 4: "B", 5: "C", 6: "C"}
+# Peta Jenjang & Fase Lengkap
+JENJANG_FASE = {
+    "RA/TK (Fase Fondasi)": "Fondasi",
+    "Kelas 1 SD/MI (Fase A)": "A",
+    "Kelas 2 SD/MI (Fase A)": "A",
+    "Kelas 3 SD/MI (Fase B)": "B",
+    "Kelas 4 SD/MI (Fase B)": "B",
+    "Kelas 5 SD/MI (Fase C)": "C",
+    "Kelas 6 SD/MI (Fase C)": "C",
+    "Kelas 7 SMP/MTs (Fase D)": "D",
+    "Kelas 8 SMP/MTs (Fase D)": "D",
+    "Kelas 9 SMP/MTs (Fase D)": "D",
+    "Kelas 10 SMA/MA/SMK (Fase E)": "E",
+    "Kelas 11 SMA/MA/SMK (Fase F)": "F",
+    "Kelas 12 SMA/MA/SMK (Fase F)": "F",
+}
 
 st.set_page_config(page_title="Generator Modul Ajar AI", page_icon="📘", layout="wide")
 
@@ -60,7 +76,7 @@ def call_ai(prompt: str, temperature=0.2) -> dict:
         max_tokens=6000,
     )
     text = response.choices[0].message.content.strip()
-    st.session_state["raw_ai_output"] = text # Untuk debugging
+    st.session_state["raw_ai_output"] = text 
     
     text = re.sub(r'^```json\s*', '', text, flags=re.MULTILINE | re.IGNORECASE)
     text = re.sub(r'^```\s*', '', text, flags=re.MULTILINE)
@@ -76,9 +92,11 @@ def call_ai(prompt: str, temperature=0.2) -> dict:
 # ==============================================================================
 
 def prompt_step_1(form: dict) -> str:
-    return f"""Kamu pakar kurikulum SD/MI Indonesia. Buat Bagian A (Identifikasi) dan C (Desain Pembelajaran) 
-untuk Mapel: {form['mapel']}, Kelas: {form['kelas']}, Topik: {form['bab']}.
-Tulis detail mendalam (Kurikulum Berbasis Cinta & Deep Learning).
+    return f"""Kamu adalah pakar kurikulum Madrasah (RA/MI/MTs/MA) di Indonesia. Buat Bagian A (Identifikasi) dan C (Desain Pembelajaran) 
+untuk Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik: {form['bab']}.
+Tulis detail mendalam sesuai Kurikulum Berbasis Cinta & Pendekatan Deep Learning.
+PENTING: Pada bagian "capaian_pembelajaran", WAJIB merujuk dan menyebutkan secara eksplisit sesuai "KMA Nomor 1503 Tahun 2025".
+
 Balas HANYA dengan JSON valid sesuai skema berikut:
 {{
   "identifikasi": {{
@@ -90,7 +108,7 @@ Balas HANYA dengan JSON valid sesuai skema berikut:
     "panca_cinta": ["string", "string"]
   }},
   "desain": {{
-    "capaian_pembelajaran": "paragraf singkat",
+    "capaian_pembelajaran": "paragraf yang menyebutkan KMA Nomor 1503 Tahun 2025",
     "tujuan_pembelajaran": ["string", "string"],
     "lintas_disiplin": ["string", "string"]
   }}
@@ -98,7 +116,7 @@ Balas HANYA dengan JSON valid sesuai skema berikut:
 
 def prompt_step_2(form: dict, step1_data: dict) -> str:
     n = form["jumlah_pertemuan"]
-    return f"""Melanjutkan modul {form['mapel']} Kelas {form['kelas']} bab {form['bab']}.
+    return f"""Melanjutkan modul {form['mapel']} {form['kelas']} bab {form['bab']}.
 Buat Pengalaman Belajar untuk TEPAT {n} pertemuan secara logis berurutan.
 Integrasikan sintak Problem Based Learning (PBL) dan prinsip Deep Learning (Mindful, Meaningful, Joyful) ke dalam kalimat kegiatannya.
 Balas HANYA dengan JSON valid sesuai skema berikut:
@@ -135,7 +153,7 @@ Balas HANYA dengan JSON valid sesuai skema berikut:
 }}"""
 
 # ==============================================================================
-# DOCX BUILDER DENGAN DESAIN BERWARNA
+# DOCX BUILDER 
 # ==============================================================================
 
 def set_cell_background(cell, hex_color: str):
@@ -202,7 +220,6 @@ def add_field_row(table, label, content_items):
     return row
 
 def build_docx(form: dict, full_data: dict) -> bytes:
-    fase = FASE_MAP[form["kelas"]]
     doc = Document()
     doc.sections[0].left_margin = Cm(2)
     doc.sections[0].right_margin = Cm(2)
@@ -234,7 +251,7 @@ def build_docx(form: dict, full_data: dict) -> bytes:
     identity = field_table(doc)
     for label, value in [
         ("Mata Pelajaran", form["mapel"]),
-        ("Kelas / Fase", f"Kelas {form['kelas']} / Fase {fase}"),
+        ("Jenjang / Kelas", form["kelas"]),
         ("Semester", form["semester"]),
         ("Alokasi Waktu", f"{len(d2['pertemuan'])} Pertemuan x {form['alokasi']}"),
         ("Bab / Topik", form["bab"]),
@@ -308,6 +325,29 @@ def build_docx(form: dict, full_data: dict) -> bytes:
     banner(doc, "C. INSTRUMEN REFLEKSI PEMBELAJARAN", COLOR_REFLEKSI, size=10.5)
     refleksi = field_table(doc)
     add_field_row(refleksi, "Pertanyaan Refleksi", d3["refleksi"])
+    
+    # --- TANDA TANGAN (KOLOM PENGESAHAN) ---
+    doc.add_paragraph() # Spasi sebelum tanda tangan
+    doc.add_paragraph()
+    
+    # Membuat tabel transparan (tanpa garis) untuk tanda tangan bersebelahan
+    sig_table = doc.add_table(rows=1, cols=2)
+    sig_table.columns[0].width = Cm(8.5)
+    sig_table.columns[1].width = Cm(8.5)
+    
+    # Sel kiri: Kepala Madrasah
+    p_kepsek = sig_table.rows[0].cells[0].paragraphs[0]
+    p_kepsek.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_kepsek.add_run("\nMengetahui,\nKepala Madrasah\n\n\n\n")
+    run_kepsek = p_kepsek.add_run(form['kepala_madrasah'])
+    run_kepsek.bold = True
+    
+    # Sel kanan: Guru Kelas (beserta titimangsa)
+    p_guru = sig_table.rows[0].cells[1].paragraphs[0]
+    p_guru.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_guru.add_run(f"{form['titimangsa']}\nGuru Mapel / Kelas\n\n\n\n")
+    run_guru = p_guru.add_run(form['penyusun'])
+    run_guru.bold = True
 
     buf = io.BytesIO()
     doc.save(buf)
@@ -317,42 +357,63 @@ def build_docx(form: dict, full_data: dict) -> bytes:
 # ==============================================================================
 # UI STREAMLIT
 # ==============================================================================
-st.title("📘 Generator Modul Ajar (Berwarna & Detail)")
+st.title("📘 Generator Modul Ajar (KMA 1503 Tahun 2025)")
 
 with st.form("form_modul"):
+    st.subheader("Data Modul")
     col1, col2 = st.columns(2)
     with col1:
         mapel = st.text_input("Mata Pelajaran", placeholder="Bahasa Indonesia")
         bab = st.text_input("Bab / Topik", placeholder="Bab 1: Anak-Anak yang Mengubah Dunia")
-        kelas = st.selectbox("Kelas", [1, 2, 3, 4, 5, 6], format_func=lambda k: f"Kelas {k} (Fase {FASE_MAP[k]})")
+        
+        # Dropdown Kelas yang sudah mencakup RA hingga MA/SMK
+        kelas = st.selectbox("Jenjang / Kelas", list(JENJANG_FASE.keys()))
+        
         semester = st.selectbox("Semester", ["1 (Satu)", "2 (Dua)"])
         jumlah_pertemuan = st.number_input("Jumlah Pertemuan", min_value=1, max_value=8, value=4)
     with col2:
         alokasi = st.text_input("Alokasi Waktu per Pertemuan", value="4 JP x 35 menit")
         model_pembelajaran = st.text_input("Model Pembelajaran", value="PBL (Problem Based Learning)")
         metode = st.text_input("Metode Pembelajaran", value="Ceramah Interaktif, Diskusi Kelompok, Tanya Jawab")
-        penyusun = st.text_input("Penyusun (Nama Guru)")
-        sekolah = st.text_input("Sekolah")
+        sekolah = st.text_input("Sekolah", placeholder="MI Miftahussalam")
         tahun_pelajaran = st.text_input("Tahun Pelajaran", value="2026/2027")
+
+    st.divider()
+    st.subheader("Data Pengesahan (Tanda Tangan)")
+    col3, col4 = st.columns(2)
+    
+    # Logika penanggalan dinamis (Otomatis hari ini)
+    now = datetime.datetime.now()
+    bulan_indo = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", 
+                  "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+    nama_bulan = bulan_indo[now.month - 1]
+    titimangsa_otomatis = f"Bogor, {now.day} {nama_bulan} {now.year}"
+
+    with col3:
+        titimangsa = st.text_input("Titimangsa (Tempat, Waktu)", value=titimangsa_otomatis)
+        penyusun = st.text_input("Penyusun (Nama Guru)", placeholder="Erian Kurniawan")
+    with col4:
+        kepala_madrasah = st.text_input("Nama Kepala Madrasah", placeholder="Drs. Andi Supriadi")
 
     submitted = st.form_submit_button("✨ Buat Modul Ajar (Butuh ~1 Menit)", use_container_width=True)
 
 if submitted:
-    if not (mapel and bab and penyusun and sekolah):
-        st.warning("Lengkapi minimal Mata Pelajaran, Bab/Topik, Penyusun, dan Sekolah.")
+    if not (mapel and bab and penyusun and sekolah and kepala_madrasah):
+        st.warning("Lengkapi minimal Mata Pelajaran, Bab/Topik, Penyusun, Kepala Madrasah, dan Sekolah.")
     else:
         form = dict(
             mapel=mapel, bab=bab, kelas=kelas, semester=semester,
             jumlah_pertemuan=int(jumlah_pertemuan), alokasi=alokasi,
             model=model_pembelajaran, metode=metode, penyusun=penyusun,
             sekolah=sekolah, tahun_pelajaran=tahun_pelajaran,
+            titimangsa=titimangsa, kepala_madrasah=kepala_madrasah
         )
         
         progress_bar = st.progress(0)
         status_text = st.empty()
         
         try:
-            status_text.write("⏳ Langkah 1/3: Menyusun Identitas & Desain Pembelajaran...")
+            status_text.write("⏳ Langkah 1/3: Menyusun Identitas, CP (KMA 1503/2025) & Desain Pembelajaran...")
             d1 = call_ai(prompt_step_1(form))
             progress_bar.progress(33)
             
@@ -381,20 +442,18 @@ if "full_data" in st.session_state:
     full_data = st.session_state["full_data"]
     
     st.divider()
-    st.subheader("Data Pengesahan (Tanda Tangan)")
-    col3, col4 = st.columns(2)
     
-    # Logika untuk membuat tanggal otomatis berbahasa Indonesia
-    now = datetime.datetime.now()
-    bulan_indo = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", 
-                  "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
-    nama_bulan = bulan_indo[now.month - 1]
+    # Sanitasi nama file agar aman di berbagai sistem operasi
+    safe_mapel = re.sub(r'[^a-zA-Z0-9_\-]', '_', form['mapel'])
+    safe_kelas = re.sub(r'[^a-zA-Z0-9_\-]', '_', form['kelas'].split()[0])
     
-    # Kamu bisa mengganti "Bogor" dengan nama kota default lain jika mau
-    titimangsa_otomatis = f"Bogor, {now.day} {nama_bulan} {now.year}"
-
-    with col3:
-        titimangsa = st.text_input("Titimangsa (Tempat, Waktu)", value=titimangsa_otomatis)
-        penyusun = st.text_input("Penyusun (Nama Guru)", placeholder="Mamik Muhapatin, S.Pd")
-    with col4:
-        kepala_madrasah = st.text_input("Nama Kepala Madrasah", placeholder="Drs. Andi Supriadi")
+    st.subheader(f"🎉 Selesai! Pratinjau & Unduh Modul: {form['mapel']} \u2013 {form['bab']}")
+    
+    docx_bytes = build_docx(form, full_data)
+    st.download_button(
+        "⬇️ Unduh sebagai Word (.docx)",
+        data=docx_bytes,
+        file_name=f"Modul_Ajar_{safe_mapel}_{safe_kelas}.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        use_container_width=True,
+    )
