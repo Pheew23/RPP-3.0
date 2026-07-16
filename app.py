@@ -86,7 +86,7 @@ def call_ai(prompt: str, temperature=0.2) -> dict:
 # ==============================================================================
 
 def prompt_step_1(form):
-    return f"""Kamu pakar Kurikulum Merdeka Deep Learning Berbasis Cinta (KBC). Buat Bagian A & C modul
+    return f"""Kamu pakar Kurikulum Merdeka Deep Learning Berbasis Cinta dengan 5 pilar (KBC). Buat Bagian A & B modul gunakan bahasa yang humanis agar tidak terlihat AI
 untuk Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik: {form['bab']}. PENTING: CP WAJIB sebutkan "KMA Nomor 1503 Tahun 2025".
 Balas HANYA JSON:
 {{"identifikasi": {{"pengetahuan_awal": ["str"], "minat_belajar": ["str"], "latar_belakang": "str", "kebutuhan_belajar": ["str"], "dimensi_profil": ["str"], "panca_cinta": ["str"]}}, "desain": {{"capaian_pembelajaran": "str", "tujuan_pembelajaran": ["str"], "lintas_disiplin": ["str"], "topik_pembelajaran": ["str"], "praktik_pedagogi": ["str"], "lingkungan_belajar": ["str"], "kemitraan_pembelajaran": ["str"], "pemanfaatan_digital": ["str"]}}}}"""
@@ -222,7 +222,7 @@ def build_modul_ajar(form: dict, full_data: dict) -> bytes:
     p1.add_run("MODUL AJAR").bold = True
     p1.runs[0].font.size, p1.runs[0].font.color.rgb = Pt(16), RGBColor.from_string("FFFFFF")
     p2 = cell.add_paragraph(); p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p2.add_run("KURIKULUM BERBASIS CINTA \u2013 PENDEKATAN DEEP LEARNING\nBerdasarkan Capaian Pembelajaran Terbaru 2025 No.46").bold = True
+    p2.add_run("KURIKULUM BERBASIS CINTA \u2013 PENDEKATAN DEEP LEARNING\nKementrian Agama").bold = True
     p2.runs[0].font.size, p2.runs[0].font.color.rgb = Pt(11), RGBColor.from_string("FFFFFF")
     doc.add_paragraph()
 
@@ -501,8 +501,8 @@ def trigger_download(file_bytes, filename):
 # ==============================================================================
 # UI STREAMLIT
 # ==============================================================================
-st.title("📘 MIFSAL ADMIN GURU GENERATOR (Standar KMA)")
-st.markdown("*Kurikulum Merdeka Deep Learning Berbasis Cinta (KBC)*")
+st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR ")
+st.markdown("*Berbasis Model Lagos AI 9.1*")
 
 with st.form("form_modul"):
     col1, col2 = st.columns(2)
@@ -557,19 +557,19 @@ if submitted:
         try:
             for tipe in pilihan_dokumen:
                 if tipe == "Modul Ajar":
-                    st.write("📘 **Memproses Modul Ajar...**")
+                    st.write("📘 **Bentar ya! Memproses Modul Ajar...**")
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     
-                    status_text.write("⏳ Langkah 1/3: Menyusun Identitas & Desain Pembelajaran...")
+                    status_text.write("⏳ Lagos AI Sedang Memasak : Langkah 1/3: Menyusun Identitas & Desain Pembelajaran...")
                     d1 = call_ai(prompt_step_1(form))
                     progress_bar.progress(33)
                     
-                    status_text.write("⏳ Langkah 2/3: Merancang Pengalaman Belajar (Tabel 4 Kolom DL)...")
+                    status_text.write("⏳ Lagos AI Sedang Memasak : Langkah 2/3: Merancang Pengalaman Belajar (Tabel 4 Kolom DL)...")
                     d2 = call_ai(prompt_step_2(form, d1))
                     progress_bar.progress(66)
                     
-                    status_text.write("⏳ Langkah 3/3: Menyiapkan Asesmen, Rubrik, LKPD & Glosarium...")
+                    status_text.write("⏳ Lagos AI Sedang Memasak : Langkah 3/3: Menyiapkan Asesmen, Rubrik, LKPD & Glosarium...")
                     d3 = call_ai(prompt_step_3(form, d2))
                     progress_bar.progress(100)
                     status_text.success("✅ Modul Ajar selesai!")
@@ -577,7 +577,7 @@ if submitted:
                     doc_bytes = build_modul_ajar(form, {"step1": d1, "step2": d2, "step3": d3})
                 
                 else:
-                    st.write(f"📄 **Memproses {tipe}...**")
+                    st.write(f"📄 **Bentar ya! Memproses {tipe}...**")
                     if tipe == "CP & ATP":
                         ai_data = call_ai(prompt_cpatp(form))
                         doc_bytes = build_cpatp(form, ai_data)
@@ -597,7 +597,7 @@ if submitted:
                 trigger_download(doc_bytes, filename)
                 time.sleep(1.5) 
             
-            st.success("🎉 Semua dokumen berhasil disusun dan sedang diunduh!")
+            st.success("🎉 Nikmati Hasilnya Selagi Hangat!")
             
         except Exception as e:
             st.error(f"Terjadi kesalahan saat memproses data: {e}")
