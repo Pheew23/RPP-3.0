@@ -16,6 +16,7 @@ BUKAN ditulis langsung di kode.
 
 import io
 import json
+import re
 
 import streamlit as st
 from openai import OpenAI
@@ -49,7 +50,6 @@ FASE_MAP = {1: "A", 2: "A", 3: "B", 4: "B", 5: "C", 6: "C"}
 
 st.set_page_config(page_title="Generator Modul Ajar AI", page_icon="📘", layout="wide")
 
-
 # ---------------------------------------------------------------------------
 # Klien NVIDIA (OpenAI-compatible endpoint)
 # ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ def get_client():
     if not api_key:
         st.error(
             "NVIDIA_API_KEY belum ada di st.secrets. "
-            "Tambahkan di .streamlit/secrets.toml, lihat secrets.toml.example."
+            "Tambahkan di .streamlit/secrets.toml."
         )
         st.stop()
     return OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key)
@@ -129,9 +129,13 @@ def call_ai(form: dict) -> dict:
         max_tokens=6000,
     )
     text = response.choices[0].message.content.strip()
-    text = text.strip("`")
-    if text.lower().startswith("json"):
-        text = text[4:].strip()
+    
+    # PERBAIKAN: Menggunakan regex untuk mengekstrak hanya format JSON
+    # Ini mencegah error jika AI memberikan output "Berikut adalah hasilnya: { ... }"
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if match:
+        text = match.group(0)
+        
     return json.loads(text)
 
 
@@ -162,7 +166,7 @@ def style_cell_text(cell, text, bold=False, color_hex=None, size=11, center=Fals
 
 def banner(doc, text, hex_color, size=12):
     """Baris pita warna penuh selebar halaman, teks putih tebal - dipakai
-    untuk judul section (mis. 'A. IDENTIFIKASI PESERTA DIDIK')."""
+    untuk judul section."""
     table = doc.add_table(rows=1, cols=1)
     table.autofit = True
     table.columns[0].width = Cm(17)
@@ -183,8 +187,7 @@ def field_table(doc):
 
 
 def add_field_row(table, label, content_items):
-    """Satu baris: kolom kiri label (biru muda), kolom kanan isi (putih).
-    content_items bisa berupa string tunggal atau list -> jadi bullet."""
+    """Satu baris: kolom kiri label (biru muda), kolom kanan isi (putih)."""
     row = table.add_row()
     label_cell, value_cell = row.cells[0], row.cells[1]
     label_cell.width = Cm(4.5)
@@ -210,8 +213,6 @@ def add_field_row(table, label, content_items):
 
 
 def doc_bullet_style(cell):
-    # Cell tidak selalu punya akses langsung ke style "List Bullet" dengan
-    # rapi di dalam tabel, jadi dipakai paragraf biasa + karakter bullet manual.
     return cell.paragraphs[0].style
 
 
@@ -373,8 +374,8 @@ if submitted:
                 st.session_state["form"] = form
                 st.session_state["data"] = data
             except json.JSONDecodeError:
-                st.error("AI mengembalikan format yang tidak valid. Coba klik tombol sekali lagi.")
-            except Exception as e:  # noqa: BLE001
+                st.error("AI mengembalikan format JSON yang tidak valid. Coba klik tombol sekali lagi.")
+            except Exception as e:
                 st.error(f"Gagal memanggil model NVIDIA: {e}")
 
 if "data" in st.session_state:
