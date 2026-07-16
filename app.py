@@ -126,7 +126,7 @@ def call_ai(form: dict) -> dict:
         model=MODEL_NAME,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.2, # Diatur lebih rendah agar AI lebih patuh pada format
-        max_tokens=6000,
+        max_tokens=14000,
     )
     text = response.choices[0].message.content.strip()
     
