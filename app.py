@@ -59,7 +59,7 @@ JENJANG_FASE = {
     "Kelas 12 SMA/MA/SMK (Fase F)": "F",
 }
 
-st.set_page_config(page_title="Generator Modul Ajar AI", page_icon="📘", layout="wide")
+st.set_page_config(page_title="MIFSAL RPP V3", page_icon="📘", layout="wide")
 
 @st.cache_resource
 def get_client():
@@ -75,7 +75,7 @@ def call_ai(prompt: str, temperature=0.2) -> dict:
         model=MODEL_NAME,
         messages=[{"role": "user", "content": prompt}],
         temperature=temperature,
-        max_tokens=6000,
+        max_tokens=7000,
     )
     text = response.choices[0].message.content.strip()
     st.session_state["raw_ai_output"] = text 
@@ -94,9 +94,9 @@ def call_ai(prompt: str, temperature=0.2) -> dict:
 # ==============================================================================
 
 def prompt_step_1(form: dict) -> str:
-    return f"""Kamu adalah pakar Kurikulum Merdeka di Indonesia. Buat Bagian A (Identifikasi) dan C (Desain Pembelajaran) 
+    return f"""Kamu adalah pakar Kurikulum Merdeka Deep learning Berbasis Cinta di Indonesia. Buat Bagian A (Identifikasi) dan C (Desain Pembelajaran) 
 untuk Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik: {form['bab']}.
-Fokuskan materi secara eksklusif pada Kurikulum Merdeka Deep Learning Berbasis Cinta (KBC).
+Fokuskan materi secara eksklusif pada Kurikulum Merdeka Deep Learning Berbasis Cinta 5 pilar (KBC).
 PENTING: Pada bagian "capaian_pembelajaran", WAJIB merujuk dan menyebutkan secara eksplisit sesuai "KMA Nomor 1503 Tahun 2025".
 
 Balas HANYA dengan JSON valid sesuai skema berikut:
@@ -120,7 +120,7 @@ def prompt_step_2(form: dict, step1_data: dict) -> str:
     n = form["jumlah_pertemuan"]
     return f"""Melanjutkan modul {form['mapel']} {form['kelas']} bab {form['bab']}.
 Buat Pengalaman Belajar untuk TEPAT {n} pertemuan secara logis berurutan.
-Fokuskan secara utuh pada Kurikulum Merdeka Deep Learning Berbasis Cinta (KBC).
+Fokuskan secara utuh pada Kurikulum Merdeka Deep Learning Berbasis Cinta 5 pilar (KBC).
 Integrasikan prinsip Deep Learning (Mindful, Meaningful, Joyful) secara jelas ke dalam kalimat kegiatannya.
 
 Balas HANYA dengan JSON valid sesuai skema berikut:
@@ -139,7 +139,7 @@ Balas HANYA dengan JSON valid sesuai skema berikut:
 def prompt_step_3(form: dict, step2_data: dict) -> str:
     return f"""Tahap akhir penyusunan modul {form['mapel']} bab {form['bab']}. 
 Buat detail Lampiran berdasarkan pertemuan yang telah disusun.
-Fokuskan pada pendekatan Kurikulum Merdeka Deep Learning Berbasis Cinta.
+Fokuskan pada pendekatan Kurikulum Merdeka Deep Learning Berbasis Cinta 5 Pilar.
 
 Balas HANYA dengan JSON valid sesuai skema berikut:
 {{
@@ -374,7 +374,7 @@ def trigger_download(file_bytes, filename):
 # ==============================================================================
 # UI STREAMLIT
 # ==============================================================================
-st.title("📘 Generator Modul Ajar (Fokus KBC & Auto Download)")
+st.title("📘 MI MIFTAHUSSALAM ADMIN GURU (Fokus KBC & Auto Download)")
 
 with st.form("form_modul"):
     st.subheader("Data Modul")
