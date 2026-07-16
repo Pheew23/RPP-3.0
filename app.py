@@ -413,7 +413,7 @@ def build_prota(form, ai_data):
     create_header(doc, "PROGRAM TAHUNAN (PROTA)", form)
     table = doc.add_table(rows=1, cols=5)
     table.style = 'Table Grid'
-    headers = ["No", "Elemen / CP", "Topik / Tujuan Pembelajaran", "JP", "Semester"]
+    headers = ["No", "Elemen / CP", "Topik / Tujuan Pembelajaran", "JP",]
     for i, h in enumerate(headers):
         set_cell_background(table.cell(0, i), COLOR_TITLE)
         style_cell(table.cell(0, i), h, bold=True, color="FFFFFF", center=True)
