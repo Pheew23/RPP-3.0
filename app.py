@@ -75,18 +75,21 @@ def call_ai(prompt: str, temperature=0.2) -> dict:
         model=MODEL_NAME,
         messages=[{"role": "user", "content": prompt}],
         temperature=temperature,
-        max_tokens=16000,
+        max_tokens=6000,
     )
     text = response.choices[0].message.content.strip()
     st.session_state["raw_ai_output"] = text 
     
-    text = re.sub(r'^```json\s*', '', text, flags=re.MULTILINE | re.IGNORECASE)
-    text = re.sub(r'^```\s*', '', text, flags=re.MULTILINE)
-    text = text.strip()
+    # PERBAIKAN: Pembersihan lebih agresif
+    # Menghapus semua teks sebelum { dan setelah }
+    start = text.find('{')
+    end = text.rfind('}')
+    if start != -1 and end != -1:
+        text = text[start:end+1]
+        
+    # Menghapus karakter kontrol yang sering merusak JSON
+    text = text.replace('\n', ' ').replace('\r', '')
     
-    match = re.search(r'\{.*\}', text, re.DOTALL)
-    if match:
-        text = match.group(0)
     return json.loads(text)
 
 # ==============================================================================
