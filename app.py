@@ -531,7 +531,7 @@ with st.form("form_modul"):
 
     st.divider()
     pilihan_dokumen = st.multiselect(
-        "Pilih dokumen yang ingin di-generate otomatis (Jangan di pilih semua ya, satu-satu cape akutu:",
+        "Pilih dokumen yang ingin di-generate otomatis (Jangan Dipilih Semua ya... satu-satu aja cape kalo sekaligus)",
         ["Modul Ajar", "CP & ATP", "Prota", "Promes", "Jurnal Mengajar"],
         default=["Modul Ajar"]
     )
