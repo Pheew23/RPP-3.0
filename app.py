@@ -75,7 +75,7 @@ def call_ai(prompt: str, temperature=0.2) -> dict:
         model=MODEL_NAME,
         messages=[{"role": "user", "content": prompt}],
         temperature=temperature,
-        max_tokens=7000,
+        max_tokens=16000,
     )
     text = response.choices[0].message.content.strip()
     st.session_state["raw_ai_output"] = text 
