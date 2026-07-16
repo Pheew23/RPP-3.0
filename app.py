@@ -1,17 +1,18 @@
 """
-Generator Modul Ajar berbasis AI - Fokus KBC & KMA 1503/2025
+Generator Modul Ajar berbasis AI - KBC, KMA 1503/2025 & Auto Download
 --------------------------------------------------------------------------------
 Mendukung RA/TK hingga SMA/MA, referensi KMA 1503 Tahun 2025, Prompt Chaining, 
-Desain Tabel Berwarna, dan Tanda Tangan Pengesahan.
-Fokus murni pada Kurikulum Merdeka Deep Learning Berbasis Cinta (KBC).
+Desain Tabel Berwarna, Tanda Tangan Pengesahan, dan Auto Pop-up Download.
 """
 
 import io
 import json
 import re
 import datetime
+import base64
 
 import streamlit as st
+import streamlit.components.v1 as components
 from openai import OpenAI
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor
@@ -93,9 +94,9 @@ def call_ai(prompt: str, temperature=0.2) -> dict:
 # ==============================================================================
 
 def prompt_step_1(form: dict) -> str:
-    return f"""Kamu adalah pakar Kurikulum Merdeka deep learning berbasis cinta di Indonesia. Buat Bagian A (Identifikasi) dan C (Desain Pembelajaran) 
+    return f"""Kamu adalah pakar Kurikulum Merdeka di Indonesia. Buat Bagian A (Identifikasi) dan C (Desain Pembelajaran) 
 untuk Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik: {form['bab']}.
-Fokuskan materi secara eksklusif pada Kurikulum Merdeka Deep Learning Berbasis Cinta dengan 5 pilar cinta (KBC).
+Fokuskan materi secara eksklusif pada Kurikulum Merdeka Deep Learning Berbasis Cinta (KBC).
 PENTING: Pada bagian "capaian_pembelajaran", WAJIB merujuk dan menyebutkan secara eksplisit sesuai "KMA Nomor 1503 Tahun 2025".
 
 Balas HANYA dengan JSON valid sesuai skema berikut:
@@ -119,7 +120,7 @@ def prompt_step_2(form: dict, step1_data: dict) -> str:
     n = form["jumlah_pertemuan"]
     return f"""Melanjutkan modul {form['mapel']} {form['kelas']} bab {form['bab']}.
 Buat Pengalaman Belajar untuk TEPAT {n} pertemuan secara logis berurutan.
-Fokuskan secara utuh pada Kurikulum Merdeka Deep Learning Berbasis Cinta dengan 5 pilar cinta(KBC).
+Fokuskan secara utuh pada Kurikulum Merdeka Deep Learning Berbasis Cinta (KBC).
 Integrasikan prinsip Deep Learning (Mindful, Meaningful, Joyful) secara jelas ke dalam kalimat kegiatannya.
 
 Balas HANYA dengan JSON valid sesuai skema berikut:
@@ -138,7 +139,7 @@ Balas HANYA dengan JSON valid sesuai skema berikut:
 def prompt_step_3(form: dict, step2_data: dict) -> str:
     return f"""Tahap akhir penyusunan modul {form['mapel']} bab {form['bab']}. 
 Buat detail Lampiran berdasarkan pertemuan yang telah disusun.
-Fokuskan pada pendekatan Kurikulum Merdeka Deep Learning Berbasis Cinta 5 Pilar.
+Fokuskan pada pendekatan Kurikulum Merdeka Deep Learning Berbasis Cinta.
 
 Balas HANYA dengan JSON valid sesuai skema berikut:
 {{
@@ -358,9 +359,22 @@ def build_docx(form: dict, full_data: dict) -> bytes:
     return buf.getvalue()
 
 # ==============================================================================
+# FUNGSI AUTO-DOWNLOAD
+# ==============================================================================
+def trigger_download(file_bytes, filename):
+    b64 = base64.b64encode(file_bytes).decode()
+    html = f'''
+        <a id="download-link" href="data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,{b64}" download="{filename}"></a>
+        <script>
+            document.getElementById("download-link").click();
+        </script>
+    '''
+    components.html(html, height=0)
+
+# ==============================================================================
 # UI STREAMLIT
 # ==============================================================================
-st.title("📘 Generator Modul Ajar (Fokus KBC & KMA 1503/2025)")
+st.title("📘 Generator Modul Ajar (Fokus KBC & Auto Download)")
 
 with st.form("form_modul"):
     st.subheader("Data Modul")
@@ -368,7 +382,7 @@ with st.form("form_modul"):
     with col1:
         mapel = st.text_input("Mata Pelajaran", placeholder="Matematika")
         bab = st.text_input("Bab / Topik", placeholder="Bab 1: Pecahan dan Desimal")
-        kelas = st.selectbox("Jenjang / Kelas", list(JENJANG_FASE.keys()), index=6) # Default Kelas 6
+        kelas = st.selectbox("Jenjang / Kelas", list(JENJANG_FASE.keys()), index=6) 
         semester = st.selectbox("Semester", ["1 (Satu)", "2 (Dua)"])
     with col2:
         jumlah_pertemuan = st.number_input("Jumlah Pertemuan", min_value=1, max_value=8, value=2)
@@ -422,10 +436,18 @@ if submitted:
             d3 = call_ai(prompt_step_3(form, d2))
             progress_bar.progress(100)
             
-            status_text.success("✅ Modul Ajar Berhasil Disusun!")
+            status_text.success("✅ Modul Ajar Berhasil Disusun! Memunculkan pop-up unduhan otomatis...")
             full_data = {"step1": d1, "step2": d2, "step3": d3}
             st.session_state["full_data"] = full_data
             st.session_state["form"] = form
+            
+            # --- Generate DOCX dan Eksekusi Auto Download ---
+            docx_bytes = build_docx(form, full_data)
+            safe_mapel = re.sub(r'[^a-zA-Z0-9_\-]', '_', form['mapel'])
+            safe_kelas = re.sub(r'[^a-zA-Z0-9_\-]', '_', form['kelas'].split()[0])
+            filename = f"Modul_Ajar_KBC_{safe_mapel}_{safe_kelas}.docx"
+            
+            trigger_download(docx_bytes, filename)
             
         except json.JSONDecodeError as e:
             st.error("AI gagal menghasilkan JSON yang valid pada salah satu tahap.")
@@ -440,15 +462,15 @@ if "full_data" in st.session_state:
     
     st.divider()
     
-    # Sanitasi nama file agar aman di berbagai sistem operasi
     safe_mapel = re.sub(r'[^a-zA-Z0-9_\-]', '_', form['mapel'])
     safe_kelas = re.sub(r'[^a-zA-Z0-9_\-]', '_', form['kelas'].split()[0])
     
     st.subheader(f"🎉 Selesai! Pratinjau & Unduh Modul: {form['mapel']} \u2013 {form['bab']}")
     
+    # Tombol unduh cadangan (fallback jika auto-download diblokir browser)
     docx_bytes = build_docx(form, full_data)
     st.download_button(
-        "⬇️ Unduh sebagai Word (.docx)",
+        "⬇️ Unduh Ulang sebagai Word (.docx)",
         data=docx_bytes,
         file_name=f"Modul_Ajar_KBC_{safe_mapel}_{safe_kelas}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
