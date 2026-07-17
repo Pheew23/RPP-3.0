@@ -40,7 +40,7 @@ COLOR_REMEDIAL = "C00000"
 COLOR_PENGAYAAN = "375623"
 COLOR_REFLEKSI = "2E75B6"
 
-MODEL_NAME = "nvidia/nemotron-3-ultra-550b-a55b"
+MODEL_NAME = "thinkingmachines/inkling"
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 JENJANG_FASE = {
@@ -51,7 +51,7 @@ JENJANG_FASE = {
     "Kelas 12 SMA/MA (Fase F)": "F",
 }
 
-st.set_page_config(page_title="MIFSAL ADMIN GURU V4", page_icon="📘", layout="wide")
+st.set_page_config(page_title="MIFSAL ADMIN GURU V3", page_icon="📘", layout="wide")
 
 @st.cache_resource
 def get_client():
