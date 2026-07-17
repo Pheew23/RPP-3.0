@@ -61,11 +61,11 @@ def get_client():
         st.stop()
     return OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key)
 
-def call_ai(prompt: str, temperature=0.2) -> dict:
+def call_ai(prompt: str, temperature=0.3) -> dict:
     client = get_client()
     response = client.chat.completions.create(
         model=MODEL_NAME, messages=[{"role": "user", "content": prompt}],
-        temperature=temperature, max_tokens=6000,
+        temperature=temperature, max_tokens=8192,
     )
     text = response.choices[0].message.content.strip()
     st.session_state["raw_ai_output"] = text 
@@ -252,7 +252,7 @@ def build_modul_ajar(form: dict, full_data: dict) -> bytes:
     doc.add_paragraph()
 
     # C. DESAIN PEMBELAJARAN
-    banner(doc, "C. DESAIN PEMBELAJARAN", COLOR_SECTION_B)
+    banner(doc, "B. DESAIN PEMBELAJARAN", COLOR_SECTION_B)
     desain = field_table(doc)
     ds_data = d1.get("desain", {})
     add_field_row(desain, "Capaian Pembelajaran (CP)", ds_data.get("capaian_pembelajaran", "-"))
