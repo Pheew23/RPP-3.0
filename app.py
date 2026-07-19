@@ -13,6 +13,7 @@ import base64
 import time
 
 import streamlit as st
+import streamlit.components.v1 as components
 from openai import OpenAI
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor
