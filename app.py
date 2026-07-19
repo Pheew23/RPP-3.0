@@ -100,11 +100,13 @@ Balas HANYA JSON:
 {{"pertemuan": [{{"nomor": 1, "materi": "str", "durasi": "str", "kegiatan": [{{"fase": "PEMBUKAAN", "aktivitas": ["str", "str"], "waktu": "5'", "dl": "Meaningful"}}, {{"fase": "INTI (MEMAHAMI)", "aktivitas": ["str", "str"], "waktu": "15'", "dl": "Mindful"}}, {{"fase": "INTI (MENGAPLIKASIKAN)", "aktivitas": ["str", "str"], "waktu": "10'", "dl": "Joyful"}}, {{"fase": "PENUTUP", "aktivitas": ["str"], "waktu": "5'", "dl": "Mindful"}}]}}]}}"""
 
 def prompt_step_3(form, step2):
-    return f"""Tahap akhir modul {form['mapel']} bab {form['bab']}. Buat asesmen, LKPD, remedial/pengayaan, glosarium, daftar pustaka.
+    # Menambahkan instruksi eksplisit jumlah LKPD yang harus dibuat
+    jumlah = form.get('jumlah_pertemuan', 1) 
+    
+    return f"""Tahap akhir modul {form['mapel']} bab {form['bab']}. Buat asesmen, LKPD (BUAT TEPAT {jumlah} LKPD, SATU UNTUK SETIAP PERTEMUAN), remedial/pengayaan, glosarium, daftar pustaka.
 PENTING: Balas HANYA JSON VALID. Jangan gunakan kutip ganda (") di dalam nilai teks. "materi_ajar" cukup 1 paragraf padat agar tidak terpotong.
 Balas HANYA JSON:
 {{"penilaian": {{"awal": ["str"], "formatif": ["str"], "sumatif": ["str"]}}, "asesmen_lampiran": {{"awal_lisan": ["str"], "sumatif_hots": ["str"]}}, "materi_ajar": "str 1 paragraf padat", "lkpd": [{{"nomor": 1, "judul": "str", "memahami": "str", "mengaplikasikan": "str", "merefleksikan": "str"}}], "tindak_lanjut": {{"remedial": "str", "pengayaan": "str", "refleksi_siswa": ["str"], "refleksi_guru": ["str"]}}, "glosarium": [{{"istilah": "str", "definisi": "str"}}], "daftar_pustaka": ["str"]}}"""
-
 def prompt_cpatp(form):
     return f"""Buat isi CP berdasarkan KMA No.1503 tahun 2025 dan ATP Mapel {form['mapel']} {form['kelas']} Topik {form['bab']} berdasar KMA 1503/2025. Balas HANYA JSON: {{"rows": [{{"elemen": "str", "cp": "str", "tp": "str", "atp": "str", "jp": "str"}}]}}"""
 
