@@ -221,7 +221,13 @@ def create_header(doc, title, form):
 # BUILDER COVER (DINAMIS BERDASARKAN PILIHAN DROPDOWN)
 # ==============================================================================
 def build_cover(form: dict, jenis_cover: str) -> bytes:
-    doc = create_base_doc(landscape=False)
+    # --- REVISI DI SINI ---
+    # Cek apakah jenis_cover adalah Prota & Promes, jika ya jadikan True
+    is_landscape = (jenis_cover == "Cover Program Tahunan & Semester")
+    
+    # Masukkan variabel is_landscape ke dalam parameter pembuat dokumen
+    doc = create_base_doc(landscape=is_landscape)
+    # ----------------------
     
     # Spasi atas
     for _ in range(4): doc.add_paragraph()
