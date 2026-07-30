@@ -58,7 +58,7 @@ def get_client():
         st.stop()
     return OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key)
 
-def call_ai(prompt: str, temperature=0.3) -> dict:
+def call_ai(prompt: str, temperature=0.7) -> dict:
     client = get_client()
     response = client.chat.completions.create(
         model=MODEL_NAME, messages=[{"role": "user", "content": prompt}],
