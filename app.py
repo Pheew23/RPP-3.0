@@ -37,7 +37,7 @@ COLOR_LAMPIRAN_II = "375623"
 COLOR_LAMPIRAN_III = "006060"  
 COLOR_LAMPIRAN_V = "2E75B6"  
 
-MODEL_NAME = "thinkingmachines/inkling"
+MODEL_NAME = "google/diffusiongemma-26b-a4b-it"
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 JENJANG_FASE = {
