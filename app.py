@@ -1,7 +1,8 @@
 """
 Generator Dokumen Admin Guru MI (KBC & KMA 1503/2025)
 --------------------------------------------------------------------------------
-Pembaruan: Modul Ajar Super Detail 3 Tahap, Sinkronisasi Terpusat (Otak Utama), Fitur LKPD Standalone
+Pembaruan: Modul Ajar Super Detail 3 Tahap (Fixed JSON & Prompt Asli), 
+Sinkronisasi Terpusat (Otak Utama), Fitur LKPD Standalone
 """
 
 import io
@@ -102,6 +103,9 @@ def get_sinkronisasi_context(d1_context, d2_context):
         return f"\n\n[SANGAT PENTING - SINKRONISASI DOKUMEN]\nKamu WAJIB mematuhi data dasar berikut agar semua dokumen selaras:\n{sinkron_text}\nJANGAN membuat materi atau TP di luar data di atas!"
     return ""
 
+# ==============================================================================
+# PROMPT MODUL AJAR (DIKEMBALIKAN 100% KE VERSI ASLI MILIK USER)
+# ==============================================================================
 def prompt_step_1(form):
     return f"""Kamu pakar Kurikulum Merdeka Deep Learning Berbasis Cinta dengan 5 pilar (KBC). Buat Bagian A & B modul gunakan bahasa yang humanis agar tidak terlihat AI
 untuk Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik: {form['bab']}. PENTING: CP dan TP WAJIB mengacu pada "KMA Nomor 1503 Tahun 2025" Untuk pemanfaata Digital Isi Minimal 3.
@@ -117,11 +121,14 @@ Balas HANYA JSON:
 
 def prompt_step_3(form, step2):
     jumlah = form.get('jumlah_pertemuan', 1) 
-    return f"""Tahap akhir modul {form['mapel']} bab {form['bab']}. Buat asesmen, LKPD ringkas (BUAT TEPAT {jumlah} LKPD ringkas), remedial/pengayaan, glosarium, daftar pustaka.
+    return f"""Tahap akhir modul {form['mapel']} bab {form['bab']}. Buat asesmen, LKPD (BUAT TEPAT {jumlah} LKPD, SATU UNTUK SETIAP PERTEMUAN), remedial/pengayaan, glosarium, daftar pustaka.
 PENTING: Balas HANYA JSON VALID. Jangan gunakan kutip ganda (") di dalam nilai teks. "materi_ajar" cukup 1 paragraf padat agar tidak terpotong.
 Balas HANYA JSON:
 {{"penilaian": {{"awal": ["str"], "formatif": ["str"], "sumatif": ["str"]}}, "asesmen_lampiran": {{"awal_lisan": ["str"], "sumatif_hots": ["str"]}}, "materi_ajar": "str 1 paragraf padat", "lkpd": [{{"nomor": 1, "judul": "str", "memahami": "str", "mengaplikasikan": "str", "merefleksikan": "str"}}], "tindak_lanjut": {{"remedial": "str", "pengayaan": "str", "refleksi_siswa": ["str"], "refleksi_guru": ["str"]}}, "glosarium": [{{"istilah": "str", "definisi": "str"}}], "daftar_pustaka": ["str"]}}"""
 
+# ==============================================================================
+# PROMPT DOKUMEN LAIN (TERINTEGRASI)
+# ==============================================================================
 def prompt_cpatp(form, d1_context=None, d2_context=None):
     sinkron = get_sinkronisasi_context(d1_context, d2_context)
     return f"""Buat isi CP dan ATP Mapel {form['mapel']} {form['kelas']} Topik {form['bab']} yang mengacu pada KMA 1503/2025.{sinkron} Balas HANYA JSON: {{"rows": [{{"elemen": "str", "cp": "str", "tp": "str", "atp": "str", "jp": "str"}}]}}"""
@@ -448,7 +455,8 @@ def build_modul_ajar(form: dict, full_data: dict) -> bytes:
     doc.add_paragraph(str(d3.get("materi_ajar", "-")))
     doc.add_paragraph()
     
-    banner(doc, "LAMPIRAN III \u2013 LKPD RINGKAS (Lihat Dokumen LKPD Terpisah untuk cetak)", COLOR_LAMPIRAN_III)
+    banner(doc, "LAMPIRAN III \u2013 LKPD (LEMBAR KERJA PESERTA DIDIK)", COLOR_LAMPIRAN_III)
+    doc.add_paragraph("(Catatan: Untuk format siap cetak, silakan gunakan file dokumen LKPD Cetak yang ter-generate secara terpisah)")
     lkpd_data = d3.get("lkpd", [])
     if isinstance(lkpd_data, list):
         for p in lkpd_data:
