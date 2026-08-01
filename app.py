@@ -1,8 +1,7 @@
 """
 Generator Dokumen Admin Guru MI (KBC & KMA 1503/2025)
 --------------------------------------------------------------------------------
-Pembaruan: Modul Ajar Super Detail, Fix JSON Parser, Fitur Dropdown Cover Dinamis
-Perbaikan: Sinkronisasi Terpusat (Otak Utama) & Fitur LKPD Standalone
+Pembaruan: Modul Ajar Super Detail 3 Tahap, Sinkronisasi Terpusat (Otak Utama), Fitur LKPD Standalone
 """
 
 import io
@@ -106,17 +105,20 @@ def get_sinkronisasi_context(d1_context, d2_context):
 def prompt_step_1(form):
     return f"""Kamu pakar Kurikulum Merdeka Deep Learning Berbasis Cinta dengan 5 pilar (KBC). Buat Bagian A & B modul gunakan bahasa yang humanis agar tidak terlihat AI
 untuk Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik: {form['bab']}. PENTING: CP dan TP WAJIB mengacu pada "KMA Nomor 1503 Tahun 2025" Untuk pemanfaata Digital Isi Minimal 3.
+PENTING: Balas HANYA dengan JSON valid. DILARANG menggunakan tanda kutip ganda (") di dalam teks string.
 Balas HANYA JSON:
 {{"identifikasi": {{"pengetahuan_awal": ["str"], "minat_belajar": ["str"], "latar_belakang": "str", "kebutuhan_belajar": ["str"], "dimensi_profil": ["str"], "panca_cinta": ["str"]}}, "desain": {{"capaian_pembelajaran": "str", "tujuan_pembelajaran": ["str"], "lintas_disiplin": ["str"], "topik_pembelajaran": ["str"], "praktik_pedagogi": ["str"], "lingkungan_belajar": ["str"], "kemitraan_pembelajaran": ["str"], "pemanfaatan_digital": ["str"]}}}}"""
 
 def prompt_step_2(form, step1):
     return f"""Lanjutkan modul {form['mapel']} {form['kelas']} bab {form['bab']}. Buat Pengalaman Belajar untuk TEPAT {form['jumlah_pertemuan']} pertemuan. Format 4 elemen untuk setiap kegiatan: fase, aktivitas, waktu, dl.
+PENTING: Balas HANYA dengan JSON valid. DILARANG menggunakan tanda kutip ganda (") di dalam teks string.
 Balas HANYA JSON:
 {{"pertemuan": [{{"nomor": 1, "materi": "str", "durasi": "str", "kegiatan": [{{"fase": "PEMBUKAAN", "aktivitas": ["str", "str"], "waktu": "5'", "dl": "Meaningful"}}, {{"fase": "INTI (MEMAHAMI)", "aktivitas": ["str", "str"], "waktu": "15'", "dl": "Mindful"}}, {{"fase": "INTI (MENGAPLIKASIKAN)", "aktivitas": ["str", "str"], "waktu": "10'", "dl": "Joyful"}}, {{"fase": "PENUTUP", "aktivitas": ["str"], "waktu": "5'", "dl": "Mindful"}}]}}]}}"""
 
 def prompt_step_3(form, step2):
     jumlah = form.get('jumlah_pertemuan', 1) 
     return f"""Tahap akhir modul {form['mapel']} bab {form['bab']}. Buat asesmen, LKPD ringkas (BUAT TEPAT {jumlah} LKPD ringkas), remedial/pengayaan, glosarium, daftar pustaka.
+PENTING: Balas HANYA JSON VALID. Jangan gunakan kutip ganda (") di dalam nilai teks. "materi_ajar" cukup 1 paragraf padat agar tidak terpotong.
 Balas HANYA JSON:
 {{"penilaian": {{"awal": ["str"], "formatif": ["str"], "sumatif": ["str"]}}, "asesmen_lampiran": {{"awal_lisan": ["str"], "sumatif_hots": ["str"]}}, "materi_ajar": "str 1 paragraf padat", "lkpd": [{{"nomor": 1, "judul": "str", "memahami": "str", "mengaplikasikan": "str", "merefleksikan": "str"}}], "tindak_lanjut": {{"remedial": "str", "pengayaan": "str", "refleksi_siswa": ["str"], "refleksi_guru": ["str"]}}, "glosarium": [{{"istilah": "str", "definisi": "str"}}], "daftar_pustaka": ["str"]}}"""
 
@@ -138,11 +140,11 @@ def prompt_jurnal(form, d1_context=None, d2_context=None):
     sinkron = get_sinkronisasi_context(d1_context, d2_context)
     return f"""Buat isi Jurnal Mengajar Harian untuk TEPAT {form['jumlah_pertemuan']} pertemuan. Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}.{sinkron} Balas HANYA JSON: {{"rows": [{{"pertemuan": "1", "topik": "str", "aktivitas": "str (Aktivitas Deep Learning)", "asesmen": "str"}}]}}"""
 
-# === PROMPT BARU UNTUK LKPD STANDALONE ===
 def prompt_lkpd(form, d1_context=None, d2_context=None):
     sinkron = get_sinkronisasi_context(d1_context, d2_context)
     return f"""Buat Lembar Kerja Peserta Didik (LKPD) lengkap yang interaktif untuk {form['jumlah_pertemuan']} pertemuan. Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}.{sinkron}
 LKPD ini akan dicetak dan dibagikan ke siswa, buat langkah kerjanya jelas, alat bahannya (jika ada), dan soal latihannya (HOTS).
+PENTING: Balas HANYA dengan JSON valid. DILARANG menggunakan tanda kutip ganda (") di dalam teks string.
 Balas HANYA JSON:
 {{"lkpd": [{{"pertemuan": 1, "topik": "str", "tujuan_kegiatan": "str", "alat_bahan": ["str"], "langkah_kerja": ["str"], "soal_latihan": ["str"]}}]}}"""
 
@@ -601,7 +603,6 @@ def build_jurnal(form, ai_data):
     buf = io.BytesIO(); doc.save(buf); buf.seek(0)
     return buf.getvalue()
 
-# === BUILDER BARU UNTUK LKPD ===
 def build_lkpd(form, ai_data):
     doc = create_base_doc(landscape=False)
     
@@ -712,7 +713,6 @@ with st.form("form_modul"):
         ]
     )
     
-    # === TAMBAH LKPD DI SINI ===
     pilihan_dokumen = st.multiselect(
         "Pilih dokumen yang ingin di-generate otomatis (Pilih sesuai kebutuhan)",
         ["Modul Ajar", "CP & ATP", "Prota", "Promes", "Jurnal Mengajar", "LKPD Siswa (Cetak)"],
@@ -747,19 +747,42 @@ if submitted:
                 trigger_download(doc_bytes, filename)
                 time.sleep(1)
 
-            # === 2. BIKIN "OTAK UTAMA" (SINKRONISASI DATA) ===
-            st.write("🧠 **AI sedang merancang 'Otak Utama' (CP, TP, & Materi) agar semua dokumen sinkron...**")
+            # === 2. BIKIN "OTAK UTAMA" (SINKRONISASI DATA) & MODUL AJAR (3 TAHAP VISUAL) ===
+            st.write("🧠 **AI sedang merancang 'Otak Utama' & Modul Ajar (Proses 3 Tahapan)...**")
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
+            status_text.write("⏳ Langkah 1/3: Merancang Desain Pembelajaran (CP, TP, & Identitas)...")
             d1_context = call_ai(prompt_step_1(form))
+            progress_bar.progress(33)
+
+            status_text.write("⏳ Langkah 2/3: Menyusun Pengalaman Belajar & Materi Pertemuan...")
             d2_context = call_ai(prompt_step_2(form, d1_context))
+            progress_bar.progress(66)
+
+            # Hanya kerjakan tahap 3 dan cetak Modul Ajar JIKA user memilihnya di menu Dropdown
+            if "Modul Ajar" in pilihan_dokumen:
+                status_text.write("⏳ Langkah 3/3: Menyelesaikan Asesmen, LKPD, & Lampiran Modul Ajar...")
+                d3_context = call_ai(prompt_step_3(form, d2_context))
+                
+                doc_bytes = build_modul_ajar(form, {"step1": d1_context, "step2": d2_context, "step3": d3_context})
+                safe_tipe = "Modul_Ajar"
+                filename = f"{safe_tipe}_{safe_mapel}_{safe_kelas}.docx"
+                st.session_state["hasil_generate"][filename] = doc_bytes
+                trigger_download(doc_bytes, filename)
+                time.sleep(1.5) 
             
-            # === 3. GENERATE DOKUMEN PILIHAN ===
+            progress_bar.progress(100)
+            status_text.success("✅ Otak Utama & Modul Dasar Selesai!")
+
+            # === 3. GENERATE DOKUMEN LAINNYA ===
             for tipe in pilihan_dokumen:
+                if tipe == "Modul Ajar":
+                    continue # Sudah diproses di atas dengan tahapan 3 langkah
+                
                 st.write(f"⚙️ **Bentar ya! Memproses {tipe}...**")
                 
-                if tipe == "Modul Ajar":
-                    d3_context = call_ai(prompt_step_3(form, d2_context))
-                    doc_bytes = build_modul_ajar(form, {"step1": d1_context, "step2": d2_context, "step3": d3_context})
-                elif tipe == "CP & ATP":
+                if tipe == "CP & ATP":
                     ai_data = call_ai(prompt_cpatp(form, d1_context, d2_context))
                     doc_bytes = build_cpatp(form, ai_data)
                 elif tipe == "Prota":
@@ -781,7 +804,7 @@ if submitted:
                 trigger_download(doc_bytes, filename)
                 time.sleep(1.5) 
             
-            st.success("🎉 Selesai! Semua dokumen sekarang 100% terhubung satu sama lain.")
+            st.success("🎉 Selesai! Semua dokumen sekarang 100% terhubung dan super lengkap.")
             
         except Exception as e:
             st.error(f"Terjadi kesalahan saat memproses data: {e}")
