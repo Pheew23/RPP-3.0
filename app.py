@@ -1,8 +1,8 @@
-
 """
 Generator Dokumen Admin Guru MI (KBC & KMA 1503/2025)
 --------------------------------------------------------------------------------
 Pembaruan: Modul Ajar Super Detail, Fix JSON Parser, Fitur Dropdown Cover Dinamis
+Perbaikan: Sinkronisasi CP/ATP, Prota, Promes, Jurnal dengan Modul Ajar
 """
 
 import io
@@ -100,26 +100,41 @@ Balas HANYA JSON:
 {{"pertemuan": [{{"nomor": 1, "materi": "str", "durasi": "str", "kegiatan": [{{"fase": "PEMBUKAAN", "aktivitas": ["str", "str"], "waktu": "5'", "dl": "Meaningful"}}, {{"fase": "INTI (MEMAHAMI)", "aktivitas": ["str", "str"], "waktu": "15'", "dl": "Mindful"}}, {{"fase": "INTI (MENGAPLIKASIKAN)", "aktivitas": ["str", "str"], "waktu": "10'", "dl": "Joyful"}}, {{"fase": "PENUTUP", "aktivitas": ["str"], "waktu": "5'", "dl": "Mindful"}}]}}]}}"""
 
 def prompt_step_3(form, step2):
-    # Menambahkan instruksi eksplisit jumlah LKPD yang harus dibuat
     jumlah = form.get('jumlah_pertemuan', 1) 
-    
     return f"""Tahap akhir modul {form['mapel']} bab {form['bab']}. Buat asesmen, LKPD (BUAT TEPAT {jumlah} LKPD, SATU UNTUK SETIAP PERTEMUAN), remedial/pengayaan, glosarium, daftar pustaka.
 PENTING: Balas HANYA JSON VALID. Jangan gunakan kutip ganda (") di dalam nilai teks. "materi_ajar" cukup 1 paragraf padat agar tidak terpotong.
 Balas HANYA JSON:
 {{"penilaian": {{"awal": ["str"], "formatif": ["str"], "sumatif": ["str"]}}, "asesmen_lampiran": {{"awal_lisan": ["str"], "sumatif_hots": ["str"]}}, "materi_ajar": "str 1 paragraf padat", "lkpd": [{{"nomor": 1, "judul": "str", "memahami": "str", "mengaplikasikan": "str", "merefleksikan": "str"}}], "tindak_lanjut": {{"remedial": "str", "pengayaan": "str", "refleksi_siswa": ["str"], "refleksi_guru": ["str"]}}, "glosarium": [{{"istilah": "str", "definisi": "str"}}], "daftar_pustaka": ["str"]}}"""
-def prompt_cpatp(form):
-    return f"""Buat isi CP yang Mengacu pada KMA No.1503 tahun 2025 dan ATP Mapel {form['mapel']} {form['kelas']} Topik {form['bab']} yang mengacu pada KMA 1503/2025. Balas HANYA JSON: {{"rows": [{{"elemen": "str", "cp": "str", "tp": "str", "atp": "str", "jp": "str"}}]}}"""
 
-def prompt_prota(form):
-    return f"""Buat isi Program Tahunan Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}. Balas HANYA JSON: {{"rows": [{{"no": "1", "elemen_cp": "str", "topik_tp": "str", "jp": "str", "semester": "1"}}]}}"""
+# === PERBAIKAN PROMPT SINKRONISASI ===
+def get_sinkronisasi_context(d1_context):
+    if not d1_context or not isinstance(d1_context, dict) or "desain" not in d1_context:
+        return ""
+    cp = d1_context["desain"].get("capaian_pembelajaran", "")
+    tp = d1_context["desain"].get("tujuan_pembelajaran", [])
+    if isinstance(tp, list): tp = ", ".join(tp)
+    return f"\n\nPENTING (SINKRONISASI MODUL): Kamu WAJIB menggunakan Capaian Pembelajaran (CP) berikut: '{cp}'\ndan Tujuan Pembelajaran (TP) berikut: '{tp}' agar sama persis dengan modul ajar."
 
-def prompt_promes(form):
+def prompt_cpatp(form, d1_context=None):
+    sinkron = get_sinkronisasi_context(d1_context)
+    return f"""Buat isi CP yang Mengacu pada KMA No.1503 tahun 2025 dan ATP Mapel {form['mapel']} {form['kelas']} Topik {form['bab']} yang mengacu pada KMA 1503/2025.{sinkron} Balas HANYA JSON: {{"rows": [{{"elemen": "str", "cp": "str", "tp": "str", "atp": "str", "jp": "str"}}]}}"""
+
+def prompt_prota(form, d1_context=None):
+    sinkron = get_sinkronisasi_context(d1_context)
+    return f"""Buat isi Program Tahunan Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}.{sinkron} Balas HANYA JSON: {{"rows": [{{"no": "1", "elemen_cp": "str", "topik_tp": "str", "jp": "str", "semester": "1"}}]}}"""
+
+def prompt_promes(form, d1_context=None):
+    sinkron = get_sinkronisasi_context(d1_context)
     is_sem1 = "1" in form['semester']
     bulan = ["Juli", "Agustus", "September", "Oktober", "November", "Desember"] if is_sem1 else ["Januari", "Februari", "Maret", "April", "Mei", "Juni"]
-    return f"""Buat rincian Program Semester Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}. Pecah ke bulan {bulan}. "minggu" array angka minggu (1-5). Balas HANYA JSON: {{"rows": [{{"no": "1", "materi_tp": "str", "jp": "str", "bulan": "Juli", "minggu": [1, 2]}}]}}"""
+    return f"""Buat rincian Program Semester Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}. Pecah ke bulan {bulan}. "minggu" array angka minggu (1-5).{sinkron} Balas HANYA JSON: {{"rows": [{{"no": "1", "materi_tp": "str", "jp": "str", "bulan": "Juli", "minggu": [1, 2]}}]}}"""
 
-def prompt_jurnal(form):
-    return f"""Buat isi Jurnal Mengajar Harian {form['jumlah_pertemuan']} pertemuan. Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}. Balas HANYA JSON: {{"rows": [{{"pertemuan": "1", "topik": "str", "aktivitas": "str (Deep Learning)", "asesmen": "str"}}]}}"""
+def prompt_jurnal(form, d2_context=None):
+    sinkron = ""
+    if d2_context and isinstance(d2_context, dict) and "pertemuan" in d2_context:
+        materi = [f"Pertemuan {p.get('nomor', '')}: {p.get('materi', '')}" for p in d2_context["pertemuan"] if isinstance(p, dict)]
+        sinkron = f"\nPENTING: Selaraskan topik pertemuan dengan data modul ajar berikut: {'; '.join(materi)}."
+    return f"""Buat isi Jurnal Mengajar Harian {form['jumlah_pertemuan']} pertemuan. Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}.{sinkron} Balas HANYA JSON: {{"rows": [{{"pertemuan": "1", "topik": "str", "aktivitas": "str (Deep Learning)", "asesmen": "str"}}]}}"""
 
 # ==============================================================================
 # FUNGSI PEMBANTU FORMATTING DOCX
@@ -221,18 +236,11 @@ def create_header(doc, title, form):
 # BUILDER COVER (DINAMIS BERDASARKAN PILIHAN DROPDOWN)
 # ==============================================================================
 def build_cover(form: dict, jenis_cover: str) -> bytes:
-    # --- REVISI DI SINI ---
-    # Cek apakah jenis_cover adalah Prota & Promes, jika ya jadikan True
     is_landscape = (jenis_cover == "Cover Program Tahunan & Semester")
-    
-    # Masukkan variabel is_landscape ke dalam parameter pembuat dokumen
     doc = create_base_doc(landscape=is_landscape)
-    # ----------------------
     
-    # Spasi atas
     for _ in range(4): doc.add_paragraph()
     
-    # Tentukan Teks Judul Utama berdasarkan pilihan
     if jenis_cover == "Cover Modul Ajar":
         judul_utama = "MODUL AJAR\nKURIKULUM BERBASIS CINTA\n"
     elif jenis_cover == "Cover Program Tahunan & Semester":
@@ -255,7 +263,6 @@ def build_cover(form: dict, jenis_cover: str) -> bytes:
     
     for _ in range(3): doc.add_paragraph()
     
-    # Identitas Mata Pelajaran
     p2 = doc.add_paragraph()
     p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
     r2 = p2.add_run(f"Mata Pelajaran : {form['mapel']}\n")
@@ -267,7 +274,6 @@ def build_cover(form: dict, jenis_cover: str) -> bytes:
     
     for _ in range(5): doc.add_paragraph()
     
-    # Identitas Penyusun
     p3 = doc.add_paragraph()
     p3.alignment = WD_ALIGN_PARAGRAPH.CENTER
     r3_a = p3.add_run("Disusun Oleh:\n")
@@ -279,7 +285,6 @@ def build_cover(form: dict, jenis_cover: str) -> bytes:
     
     for _ in range(6): doc.add_paragraph()
     
-    # Identitas Sekolah
     p4 = doc.add_paragraph()
     p4.alignment = WD_ALIGN_PARAGRAPH.CENTER
     r4 = p4.add_run(f"{form['sekolah']}\n")
@@ -628,7 +633,6 @@ with st.form("form_modul"):
 
     st.divider()
     
-    # === DROPDOWN COVER BARU YANG LEBIH SPESIFIK ===
     jenis_cover = st.selectbox(
         "Pilih Jenis Cover yang Ingin Dibuat",
         [
@@ -678,8 +682,14 @@ if submitted:
                 trigger_download(doc_bytes, filename)
                 time.sleep(1.5)
             
-            # === GENERATE DOKUMEN LAINNYA ===
-            for tipe in pilihan_dokumen:
+            # === PERBAIKAN URUTAN EKSEKUSI (MODUL AJAR JADI PRIORITAS UTAMA) ===
+            # Kita urutkan agar 'Modul Ajar' selalu dieksekusi pertama
+            pilihan_sorted = sorted(pilihan_dokumen, key=lambda x: 0 if x == "Modul Ajar" else 1)
+            
+            d1_context = None # Menyimpan konteks desain CP/TP dari Modul Ajar
+            d2_context = None # Menyimpan pertemuan dari Modul Ajar untuk Jurnal
+            
+            for tipe in pilihan_sorted:
                 if tipe == "Modul Ajar":
                     st.write("📘 **Bentar ya! Memproses Modul Ajar...**")
                     progress_bar = st.progress(0)
@@ -687,10 +697,12 @@ if submitted:
                     
                     status_text.write("⏳ AI Sedang Memasak : Langkah 1/3: Sabar ya...")
                     d1 = call_ai(prompt_step_1(form))
+                    d1_context = d1 # Simpan memori hasil tahap 1 untuk diekstrak CP/TP-nya
                     progress_bar.progress(33)
                     
                     status_text.write("⏳ AI Sedang Memasak : Langkah 2/3: Sebentar lagi kok...")
                     d2 = call_ai(prompt_step_2(form, d1))
+                    d2_context = d2 # Simpan hasil pertemuan untuk jurnal
                     progress_bar.progress(66)
                     
                     status_text.write("⏳ AI Sedang Memasak : Langkah 3/3: Beneran ini terakhir, Tunggu ya...")
@@ -703,16 +715,16 @@ if submitted:
                 else:
                     st.write(f"📄 **Bentar ya! Memproses {tipe}...**")
                     if tipe == "CP & ATP":
-                        ai_data = call_ai(prompt_cpatp(form))
+                        ai_data = call_ai(prompt_cpatp(form, d1_context))
                         doc_bytes = build_cpatp(form, ai_data)
                     elif tipe == "Prota":
-                        ai_data = call_ai(prompt_prota(form))
+                        ai_data = call_ai(prompt_prota(form, d1_context))
                         doc_bytes = build_prota(form, ai_data)
                     elif tipe == "Promes":
-                        ai_data = call_ai(prompt_promes(form))
+                        ai_data = call_ai(prompt_promes(form, d1_context))
                         doc_bytes = build_promes(form, ai_data)
                     elif tipe == "Jurnal Mengajar":
-                        ai_data = call_ai(prompt_jurnal(form))
+                        ai_data = call_ai(prompt_jurnal(form, d2_context))
                         doc_bytes = build_jurnal(form, ai_data)
                 
                 safe_tipe = tipe.replace(" & ", "_").replace(" ", "_")
