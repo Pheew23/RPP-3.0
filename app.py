@@ -62,7 +62,7 @@ def call_ai(prompt: str, temperature=0.7) -> dict:
     client = get_client()
     response = client.chat.completions.create(
         model=MODEL_NAME, messages=[{"role": "user", "content": prompt}],
-        temperature=temperature, max_tokens=8192,
+        temperature=temperature, max_tokens=12192,
     )
     text = response.choices[0].message.content.strip()
     st.session_state["raw_ai_output"] = text 
