@@ -58,7 +58,7 @@ def get_client():
         st.stop()
     return OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key)
 
-def call_ai(prompt: str, temperature=0.3) -> dict:
+def call_ai(prompt: str, temperature=0.7) -> dict:
     client = get_client()
     response = client.chat.completions.create(
         model=MODEL_NAME, messages=[{"role": "user", "content": prompt}],
@@ -107,8 +107,8 @@ def get_sinkronisasi_context(d1_context, d2_context):
 # PROMPT MODUL AJAR (DIKEMBALIKAN 100% KE VERSI ASLI MILIK USER)
 # ==============================================================================
 def prompt_step_1(form):
-    return f"""Kamu pakar Kurikulum Merdeka Deep Learning Berbasis Cinta dengan 5 pilar (KBC). Buat Bagian A & B modul gunakan bahasa yang humanis agar tidak terlihat AI
-untuk Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik: {form['bab']}. PENTING: CP dan TP WAJIB mengacu pada "KMA Nomor 1503 Tahun 2025" Untuk pemanfaata Digital Isi Minimal 3.
+    return f"""Kamu pakar Kurikulum Merdeka Pendekatan Deep Learning Berbasis Cinta dengan 5 pilar (KBC). Buat Bagian A & B modul gunakan bahasa yang humanis agar tidak terlihat AI
+untuk Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik: {form['bab']}. PENTING: CP dan TP WAJIB mengacu pada "KMA Nomor 1503 Tahun 2025" Untuk pemanfaata Digital Isi Minimal 3, Wajib Masukan semua Panca Cinta.
 PENTING: Balas HANYA dengan JSON valid. DILARANG menggunakan tanda kutip ganda (") di dalam teks string.
 Balas HANYA JSON:
 {{"identifikasi": {{"pengetahuan_awal": ["str"], "minat_belajar": ["str"], "latar_belakang": "str", "kebutuhan_belajar": ["str"], "dimensi_profil": ["str"], "panca_cinta": ["str"]}}, "desain": {{"capaian_pembelajaran": "str", "tujuan_pembelajaran": ["str"], "lintas_disiplin": ["str"], "topik_pembelajaran": ["str"], "praktik_pedagogi": ["str"], "lingkungan_belajar": ["str"], "kemitraan_pembelajaran": ["str"], "pemanfaatan_digital": ["str"]}}}}"""
