@@ -1,7 +1,7 @@
 """
 Generator Dokumen Admin Guru MI (KBC & KMA 1503/2025)
 --------------------------------------------------------------------------------
-Pembaruan: Multi-Bab Generator (Versi Ringan tanpa Pandas), Sinkronisasi Konteks Global, Aturan Ketat KMA 1503.
+Pembaruan: Perbaikan LKPD agar terisi soal nyata (tidak kosong), dan Modul Ajar Super Detail Siap Pakai.
 """
 
 import io
@@ -45,7 +45,7 @@ JENJANG_FASE = {
     "Kelas 12 SMA/MA (Fase F)": "F",
 }
 
-st.set_page_config(page_title="MIFSAL ADMIN GURU V4 (MULTI-BAB)", page_icon="📘", layout="wide")
+st.set_page_config(page_title="MIFSAL ADMIN GURU V4.1", page_icon="📘", layout="wide")
 
 @st.cache_resource
 def get_client():
@@ -55,7 +55,7 @@ def get_client():
         st.stop()
     return OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key)
 
-def call_ai(prompt: str, temperature=0.7) -> dict:
+def call_ai(prompt: str, temperature=0.2) -> dict:
     client = get_client()
     text = ""
     max_retries = 4
@@ -64,7 +64,7 @@ def call_ai(prompt: str, temperature=0.7) -> dict:
         try:
             response = client.chat.completions.create(
                 model=MODEL_NAME, messages=[{"role": "user", "content": prompt}],
-                temperature=temperature, max_tokens=12192,
+                temperature=temperature, max_tokens=14192,
             )
             text = response.choices[0].message.content.strip()
             break
@@ -98,7 +98,6 @@ def call_ai(prompt: str, temperature=0.7) -> dict:
 # ==============================================================================
 def get_aggregated_sinkronisasi_context(all_chapters_data):
     sinkron_text = ""
-    total_jp = 0
     
     for idx, chap in enumerate(all_chapters_data):
         bab_name = chap["bab"]
@@ -123,27 +122,31 @@ def get_aggregated_sinkronisasi_context(all_chapters_data):
     return ""
 
 # ==============================================================================
-# PROMPT MODUL AJAR (PER BAB)
+# PROMPT MODUL AJAR (PER BAB) - DIREVISI MENJADI SANGAT DETAIL
 # ==============================================================================
 def prompt_step_1(form, bab_name):
-    return f"""Kamu pakar Kurikulum Merdeka Pendekatan Deep Learning Berbasis Cinta dengan 5 pilar (KBC). WAJIB "JANGAN SAMPAI BUAT KESALAHAN" buat selengkap mungkin.
+    return f"""Kamu pakar Kurikulum Merdeka Pendekatan Deep Learning Berbasis Cinta dengan 5 pilar (KBC). 
+TUGASMU: Buat Desain Pembelajaran yang SEMPURNA, SPESIFIK, dan SIAP PAKAI oleh guru di kelas. JANGAN MENGGUNAKAN TEKS PLACEHOLDER ATAU INSTRUKSI UMUM. Tuliskan materi secara nyata.
 Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik Khusus Modul Ini: {bab_name}. 
-PENTING: CP dan TP WAJIB mengacu pada "KMA Nomor 1503 Tahun 2025". Masukan minimal 3 Pemanfaatan Digital, serta Panca Cinta KBC dan penjelasanya.
+PENTING: CP dan TP WAJIB mengacu pada "KMA Nomor 1503 Tahun 2025". Masukan minimal 3 Pemanfaatan Digital (tuliskan nama alat/aplikasinya), serta Panca Cinta KBC secara spesifik.
 Balas HANYA JSON:
 {{"identifikasi": {{"pengetahuan_awal": ["str"], "minat_belajar": ["str"], "latar_belakang": "str", "kebutuhan_belajar": ["str"], "dimensi_profil": ["str"], "panca_cinta": ["str"]}}, "desain": {{"capaian_pembelajaran": "str", "tujuan_pembelajaran": ["str"], "lintas_disiplin": ["str"], "topik_pembelajaran": ["str"], "praktik_pedagogi": ["str"], "lingkungan_belajar": ["str"], "kemitraan_pembelajaran": ["str"], "pemanfaatan_digital": ["str"]}}}}"""
 
 def prompt_step_2(form, bab_name, jumlah_pertemuan, step1):
-    return f"""Lanjutkan modul {form['mapel']} {form['kelas']} bab {bab_name}. Buat Pengalaman Belajar untuk TEPAT {jumlah_pertemuan} pertemuan. Format 4 elemen untuk setiap kegiatan: fase, aktivitas, waktu, dl.
+    return f"""Lanjutkan modul {form['mapel']} {form['kelas']} bab {bab_name}. Buat Pengalaman Belajar untuk TEPAT {jumlah_pertemuan} pertemuan. 
+ATURAN MUTLAK: Aktivitas pembelajaran HARUS DETAIL DAN SIAP PRAKTIK! Jangan menulis "Guru memberikan apersepsi", tapi tulis "Guru bertanya: 'Anak-anak, pernahkah kalian melihat...'". Berikan langkah nyata, bukan kerangka kosong.
 Balas HANYA JSON:
-{{"pertemuan": [{{"nomor": 1, "materi": "str", "durasi": "str", "kegiatan": [{{"fase": "PEMBUKAAN", "aktivitas": ["str"], "waktu": "5'", "dl": "Meaningful"}}, {{"fase": "INTI (MEMAHAMI)", "aktivitas": ["str"], "waktu": "15'", "dl": "Mindful"}}, {{"fase": "INTI (MENGAPLIKASIKAN)", "aktivitas": ["str"], "waktu": "10'", "dl": "Joyful"}}, {{"fase": "PENUTUP", "aktivitas": ["str"], "waktu": "5'", "dl": "Mindful"}}]}}]}}"""
+{{"pertemuan": [{{"nomor": 1, "materi": "Materi spesifik pertemuan ini", "durasi": "str", "kegiatan": [{{"fase": "PEMBUKAAN", "aktivitas": ["Langkah guru & siswa spesifik 1", "Langkah spesifik 2"], "waktu": "10'", "dl": "Meaningful"}}, {{"fase": "INTI (MEMAHAMI)", "aktivitas": ["Langkah inti spesifik 1", "Langkah inti spesifik 2"], "waktu": "20'", "dl": "Mindful"}}, {{"fase": "INTI (MENGAPLIKASIKAN)", "aktivitas": ["Tugas spesifik 1", "Tugas spesifik 2"], "waktu": "30'", "dl": "Joyful"}}, {{"fase": "PENUTUP", "aktivitas": ["Kesimpulan spesifik"], "waktu": "10'", "dl": "Mindful"}}]}}]}}"""
 
 def prompt_step_3(form, bab_name, jumlah_pertemuan, step2):
-    return f"""Tahap akhir modul {form['mapel']} bab {bab_name}. Buat asesmen, LKPD (BUAT TEPAT {jumlah_pertemuan} LKPD), remedial, glosarium. "materi_ajar" cukup 1 paragraf padat.
+    return f"""Tahap akhir modul {form['mapel']} bab {bab_name}. Buat asesmen dan LKPD untuk {jumlah_pertemuan} pertemuan. 
+ATURAN MUTLAK LKPD: JANGAN KOSONG! Bagian LKPD ('memahami', 'mengaplikasikan', 'merefleksikan') HARUS BERISI SOAL-SOAL ATAU PERTANYAAN NYATA YANG SIAP DIJAWAB SISWA. Jangan tulis "Siswa diberikan pertanyaan", TAPI TULISKAN SOALNYA SECARA LANGSUNG (contoh: "1. Jelaskan apa yang dimaksud dengan...").
+Materi ajar buat 1 paragraf padat namun berisi ilmu yang nyata.
 Balas HANYA JSON:
-{{"penilaian": {{"awal": ["str"], "formatif": ["str"], "sumatif": ["str"]}}, "asesmen_lampiran": {{"awal_lisan": ["str"], "sumatif_hots": ["str"]}}, "materi_ajar": "str", "lkpd": [{{"nomor": 1, "judul": "str", "memahami": "str", "mengaplikasikan": "str", "merefleksikan": "str"}}], "tindak_lanjut": {{"remedial": "str", "pengayaan": "str", "refleksi_siswa": ["str"], "refleksi_guru": ["str"]}}, "glosarium": [{{"istilah": "str", "definisi": "str"}}], "daftar_pustaka": ["str"]}}"""
+{{"penilaian": {{"awal": ["Pertanyaan pemantik nyata 1", "Pertanyaan nyata 2"], "formatif": ["Soal kuis nyata"], "sumatif": ["Soal ulangan nyata"]}}, "asesmen_lampiran": {{"awal_lisan": ["Soal lisan nyata 1", "Soal lisan nyata 2"], "sumatif_hots": ["Soal HOTS 1", "Soal HOTS 2"]}}, "materi_ajar": "Ringkasan materi komprehensif 1 paragraf penuh...", "lkpd": [{{"nomor": 1, "judul": "Judul Latihan", "memahami": "1. Soal konseptual pertama...\n2. Soal konseptual kedua...", "mengaplikasikan": "1. Studi kasus atau tugas nyata...", "merefleksikan": "1. Pertanyaan refleksi untuk siswa..."}}], "tindak_lanjut": {{"remedial": "Langkah remedial spesifik", "pengayaan": "Langkah pengayaan spesifik", "refleksi_siswa": ["Pertanyaan refleksi 1"], "refleksi_guru": ["Pertanyaan refleksi guru 1"]}}, "glosarium": [{{"istilah": "str", "definisi": "str"}}], "daftar_pustaka": ["str"]}}"""
 
 # ==============================================================================
-# PROMPT DOKUMEN LAIN (TERINTEGRASI MULTI-BAB & KMA 1503)
+# PROMPT DOKUMEN LAIN
 # ==============================================================================
 def prompt_cp(form, aggregated_context):
     return f"""Buat dokumen Capaian Pembelajaran (CP) Mapel {form['mapel']} Fase/Kelas {form['kelas']}. 
@@ -177,7 +180,8 @@ Balas HANYA JSON: {{"rows": [{{"pertemuan": "1", "topik": "str", "aktivitas": "s
 
 def prompt_lkpd_global(form, aggregated_context, total_pertemuan):
     return f"""Buat Buku LKPD Lengkap untuk total {total_pertemuan} pertemuan mencakup seluruh bab.{aggregated_context}
-Balas HANYA JSON: {{"lkpd": [{{"pertemuan": 1, "topik": "str", "tujuan_kegiatan": "str", "alat_bahan": ["str"], "langkah_kerja": ["str"], "soal_latihan": ["str"]}}]}}"""
+ATURAN MUTLAK: Isi 'soal_latihan' dengan SOAL URAIAN NYATA yang menantang dan siap dikerjakan siswa (contoh: "Sebutkan 3 macam...", "Jelaskan mengapa..."). JANGAN KOSONG dan jangan beri instruksi umum.
+Balas HANYA JSON: {{"lkpd": [{{"pertemuan": 1, "topik": "str", "tujuan_kegiatan": "str", "alat_bahan": ["str"], "langkah_kerja": ["Instruksi kerja 1", "Instruksi kerja 2"], "soal_latihan": ["1. Pertanyaan nyata pertama...", "2. Pertanyaan nyata kedua..."]}}]}}"""
 
 
 # ==============================================================================
@@ -635,8 +639,8 @@ def build_lkpd(form, ai_data):
 # ==============================================================================
 # UI STREAMLIT (SISTEM MULTI-BAB RINGAN TANPA PANDAS)
 # ==============================================================================
-st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4 ")
-st.markdown("*Berbasis Model Lagos AI 9.1 - Multi-Bab (Ringan) & Terintegrasi Master KMA 1503*")
+st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4.1 ")
+st.markdown("*Berbasis Model Lagos AI 9.1 - Multi-Bab (Ringan) & Modul Super Detail*")
 
 with st.form("form_modul"):
     col1, col2 = st.columns(2)
