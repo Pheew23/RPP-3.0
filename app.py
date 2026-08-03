@@ -66,7 +66,7 @@ def call_ai(prompt: str, temperature=0.2) -> dict:
         try:
             response = client.chat.completions.create(
                 model=MODEL_NAME, messages=[{"role": "user", "content": prompt}],
-                temperature=temperature, max_tokens=12192,
+                temperature=temperature, max_tokens=16192,
             )
             text = response.choices[0].message.content.strip()
             break
