@@ -1,7 +1,7 @@
 """
 Generator Dokumen Admin Guru MI (KBC & KMA 1503/2025)
 --------------------------------------------------------------------------------
-Pembaruan: Multi-Bab Generator, Sinkronisasi Konteks Global, Aturan Ketat KMA 1503.
+Pembaruan: Multi-Bab Generator (Versi Ringan tanpa Pandas), Sinkronisasi Konteks Global, Aturan Ketat KMA 1503.
 """
 
 import io
@@ -9,7 +9,6 @@ import json
 import re
 import datetime
 import time
-import pandas as pd
 
 import streamlit as st
 from openai import OpenAI
@@ -127,9 +126,9 @@ def get_aggregated_sinkronisasi_context(all_chapters_data):
 # PROMPT MODUL AJAR (PER BAB)
 # ==============================================================================
 def prompt_step_1(form, bab_name):
-    return f"""Kamu pakar Kurikulum Merdeka Pendekatan Deep Learning Berbasis Cinta dengan 5 pilar (KBC). WAJIB JANGAN SAMPAI BUAT KESALAHAN.
+    return f"""Kamu pakar Kurikulum Merdeka Pendekatan Deep Learning Berbasis Cinta dengan 5 pilar (KBC). WAJIB "JANGAN SAMPAI BUAT KESALAHAN" buat selengkap mungkin.
 Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik Khusus Modul Ini: {bab_name}. 
-PENTING: CP dan TP WAJIB mengacu pada "KMA Nomor 1503 Tahun 2025". Masukan minimal 3 Pemanfaatan Digital, serta Panca Cinta KBC.
+PENTING: CP dan TP WAJIB mengacu pada "KMA Nomor 1503 Tahun 2025". Masukan minimal 3 Pemanfaatan Digital, serta Panca Cinta KBC dan penjelasanya.
 Balas HANYA JSON:
 {{"identifikasi": {{"pengetahuan_awal": ["str"], "minat_belajar": ["str"], "latar_belakang": "str", "kebutuhan_belajar": ["str"], "dimensi_profil": ["str"], "panca_cinta": ["str"]}}, "desain": {{"capaian_pembelajaran": "str", "tujuan_pembelajaran": ["str"], "lintas_disiplin": ["str"], "topik_pembelajaran": ["str"], "praktik_pedagogi": ["str"], "lingkungan_belajar": ["str"], "kemitraan_pembelajaran": ["str"], "pemanfaatan_digital": ["str"]}}}}"""
 
@@ -182,7 +181,7 @@ Balas HANYA JSON: {{"lkpd": [{{"pertemuan": 1, "topik": "str", "tujuan_kegiatan"
 
 
 # ==============================================================================
-# FUNGSI PEMBANTU FORMATTING DOCX (Tetap Sama)
+# FUNGSI PEMBANTU FORMATTING DOCX
 # ==============================================================================
 def safe_list(val, default=None):
     if default is None: default = ["-"]
@@ -634,10 +633,10 @@ def build_lkpd(form, ai_data):
     return buf.getvalue()
 
 # ==============================================================================
-# UI STREAMLIT (SISTEM MULTI-BAB)
+# UI STREAMLIT (SISTEM MULTI-BAB RINGAN TANPA PANDAS)
 # ==============================================================================
 st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4 ")
-st.markdown("*Berbasis Model Lagos AI 9.1 - Multi-Bab & Terintegrasi Master KMA 1503*")
+st.markdown("*Berbasis Model Lagos AI 9.1 - Multi-Bab (Ringan) & Terintegrasi Master KMA 1503*")
 
 with st.form("form_modul"):
     col1, col2 = st.columns(2)
@@ -652,14 +651,10 @@ with st.form("form_modul"):
 
     st.divider()
     st.markdown("### 📚 Data Bab Pembelajaran (Multi-Bab)")
-    st.info("Tambahkan baris baru di tabel ini untuk membuat lebih dari 1 Bab secara otomatis. Modul Ajar akan di-generate untuk masing-masing Bab, sedangkan Dokumen seperti ATP/Prota akan dirangkum dari seluruh Bab di bawah ini.")
+    st.info("Ketik nama Bab dan jumlah pertemuannya ke bawah. Pisahkan dengan tanda sama dengan (=). Satu baris untuk satu Bab.")
     
-    df_bab_default = pd.DataFrame([
-        {"Bab / Topik": "Bab 1: Ketentuan Zakat Fitrah", "Jumlah Pertemuan": 2},
-        {"Bab / Topik": "Bab 2: Ketentuan Infak dan Sedekah", "Jumlah Pertemuan": 2}
-    ])
-    
-    tabel_bab = st.data_editor(df_bab_default, num_rows="dynamic", use_container_width=True)
+    default_bab_text = "Bab 1: Ketentuan Zakat Fitrah = 2\nBab 2: Ketentuan Infak dan Sedekah = 2\nBab 3: Ketentuan Kurban = 2"
+    input_bab_raw = st.text_area("Daftar Bab & Jumlah Pertemuan", value=default_bab_text, height=150)
 
     st.divider()
     col3, col4 = st.columns(2)
@@ -669,9 +664,9 @@ with st.form("form_modul"):
 
     with col3:
         titimangsa = st.text_input("Titimangsa", value=titimangsa_otomatis)
-        penyusun = st.text_input("Penyusun (Guru)", placeholder="Erian Kurniawan,S.E")
+        penyusun = st.text_input("Penyusun (Guru)", placeholder="Nama Guru, S.Pd.")
     with col4:
-        kepala_madrasah = st.text_input("Kepala Madrasah", placeholder="Drs. Andi Supriadi")
+        kepala_madrasah = st.text_input("Kepala Madrasah", placeholder="Nama Kepala Sekolah")
 
     st.divider()
     
@@ -689,10 +684,27 @@ with st.form("form_modul"):
     submitted = st.form_submit_button("✨ Eksekusi & Generate Semua Dokumen", use_container_width=True)
 
 if submitted:
+    # Parsing Input Text Area ke format list of dict (MENGGANTIKAN PANDAS)
+    daftar_bab = []
+    if input_bab_raw.strip():
+        lines = input_bab_raw.strip().split('\n')
+        for line in lines:
+            if "=" in line:
+                parts = line.split("=")
+                nama_bab = parts[0].strip()
+                try:
+                    jml_pert = int(parts[1].strip())
+                except ValueError:
+                    jml_pert = 2 # Jika gagal baca angka, default 2
+                daftar_bab.append({"Bab / Topik": nama_bab, "Jumlah Pertemuan": jml_pert})
+            else:
+                if line.strip():
+                    daftar_bab.append({"Bab / Topik": line.strip(), "Jumlah Pertemuan": 2})
+
     if not (mapel and penyusun and sekolah and kepala_madrasah):
         st.warning("Lengkapi data identitas (Mapel, Penyusun, Sekolah, Kepala).")
-    elif tabel_bab.empty or tabel_bab["Bab / Topik"].isnull().all():
-        st.warning("Harap isi setidaknya 1 Bab pada tabel.")
+    elif len(daftar_bab) == 0:
+        st.warning("Harap isi setidaknya 1 Bab pada kotak input teks.")
     else:
         form = dict(
             mapel=mapel, kelas=kelas, semester=semester,
@@ -716,23 +728,17 @@ if submitted:
             all_chapters_data = []
             total_pertemuan_global = 0
             
-            # Konversi dataframe pandas ke list of dict
-            daftar_bab = tabel_bab.dropna(subset=["Bab / Topik"]).to_dict('records')
-            
             if "Modul Ajar (Per Bab)" in pilihan_dokumen or True: # Tetap harus di proses untuk master konteks
                 st.markdown("### 🧠 Proses Pembuatan Master Data & Modul Ajar (Per Bab)")
                 
                 for idx, row in enumerate(daftar_bab):
                     bab_name = str(row["Bab / Topik"])
-                    try: 
-                        jml_pert = int(row["Jumlah Pertemuan"])
-                    except: 
-                        jml_pert = 2
+                    jml_pert = row["Jumlah Pertemuan"]
                     
                     total_pertemuan_global += jml_pert
                     safe_bab = re.sub(r'[^a-zA-Z0-9_\-]', '_', bab_name)
                     
-                    st.write(f"🔄 **Sedang memproses {bab_name}...**")
+                    st.write(f"🔄 **Sedang memproses {bab_name} ({jml_pert} Pertemuan)...**")
                     
                     st.info("Tahap 1: Desain Pembelajaran...")
                     d1_ctx = call_ai(prompt_step_1(form, bab_name))
