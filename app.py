@@ -1,19 +1,17 @@
 """
 Generator Dokumen Admin Guru MI (KBC & KMA 1503/2025)
 --------------------------------------------------------------------------------
-Pembaruan: Proses Eksekusi Bertahap (Anti-Error), Modul Ajar 3 Tahap Eksplisit,
-Pemisahan CP & ATP, dan Sinkronisasi Format Sesuai File Contoh.
+Pembaruan: Multi-Bab Generator, Sinkronisasi Konteks Global, Aturan Ketat KMA 1503.
 """
 
 import io
 import json
 import re
 import datetime
-import base64
 import time
+import pandas as pd
 
 import streamlit as st
-import streamlit.components.v1 as components
 from openai import OpenAI
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor
@@ -48,7 +46,7 @@ JENJANG_FASE = {
     "Kelas 12 SMA/MA (Fase F)": "F",
 }
 
-st.set_page_config(page_title="MIFSAL ADMIN GURU V3", page_icon="📘", layout="wide")
+st.set_page_config(page_title="MIFSAL ADMIN GURU V4 (MULTI-BAB)", page_icon="📘", layout="wide")
 
 @st.cache_resource
 def get_client():
@@ -61,7 +59,7 @@ def get_client():
 def call_ai(prompt: str, temperature=0.7) -> dict:
     client = get_client()
     text = ""
-    max_retries = 4  # Maksimal coba ulang jika terkena limit API
+    max_retries = 4
     
     for attempt in range(max_retries):
         try:
@@ -70,14 +68,13 @@ def call_ai(prompt: str, temperature=0.7) -> dict:
                 temperature=temperature, max_tokens=12192,
             )
             text = response.choices[0].message.content.strip()
-            break  # Jika sukses, keluar dari loop retry
+            break
         except Exception as e:
-            # Menangkap error limit dan mencoba ulang setelah jeda aman
             if "429" in str(e) or "Too Many Requests" in str(e):
                 if attempt < max_retries - 1:
-                    time.sleep(4)  # Istirahat 15 detik sebelum request lagi
+                    time.sleep(15)
                     continue
-            raise e  # Jika bukan error 429 atau jatah retry habis, lemparkan error-nya
+            raise e
 
     st.session_state["raw_ai_output"] = text 
     
@@ -98,97 +95,94 @@ def call_ai(prompt: str, temperature=0.7) -> dict:
         return {}
 
 # ==============================================================================
-# PROMPT SINKRONISASI TOTAL (MASTER CONTEXT)
+# PROMPT SINKRONISASI TOTAL (MULTI-BAB CONTEXT)
 # ==============================================================================
-def get_sinkronisasi_context(d1_context, d2_context):
+def get_aggregated_sinkronisasi_context(all_chapters_data):
     sinkron_text = ""
-    if d1_context and isinstance(d1_context, dict) and "desain" in d1_context:
-        cp = d1_context["desain"].get("capaian_pembelajaran", "")
-        tp = d1_context["desain"].get("tujuan_pembelajaran", [])
-        if isinstance(tp, list): tp = ", ".join(tp)
-        sinkron_text += f"1. Capaian Pembelajaran (CP): '{cp}'\n2. Tujuan Pembelajaran (TP): '{tp}'\n"
-
-    if d2_context and isinstance(d2_context, dict) and "pertemuan" in d2_context:
-        materi_list = [f"Pertemuan {p.get('nomor', '')}: {p.get('materi', '')}" for p in d2_context.get("pertemuan", []) if isinstance(p, dict)]
-        materi_str = " | ".join(materi_list)
-        sinkron_text += f"3. Rincian Materi Pertemuan WAJIB menggunakan ini: {materi_str}\n"
+    total_jp = 0
+    
+    for idx, chap in enumerate(all_chapters_data):
+        bab_name = chap["bab"]
+        d1 = chap["d1"]
+        d2 = chap["d2"]
+        
+        sinkron_text += f"\n--- INFORMASI BAB {idx+1}: {bab_name} ---\n"
+        
+        if d1 and "desain" in d1:
+            cp = d1["desain"].get("capaian_pembelajaran", "")
+            tp = d1["desain"].get("tujuan_pembelajaran", [])
+            if isinstance(tp, list): tp = ", ".join(tp)
+            sinkron_text += f"CP: '{cp}'\nTP: '{tp}'\n"
+            
+        if d2 and "pertemuan" in d2:
+            materi_list = [f"Pertemuan {p.get('nomor', '')}: {p.get('materi', '')}" for p in d2.get("pertemuan", []) if isinstance(p, dict)]
+            materi_str = " | ".join(materi_list)
+            sinkron_text += f"Rincian Materi (Wajib dipakai berurutan): {materi_str}\n"
 
     if sinkron_text:
-        return f"\n\n[SANGAT PENTING - SINKRONISASI DOKUMEN]\nKamu WAJIB mematuhi data dasar berikut agar semua dokumen selaras:\n{sinkron_text}\nJANGAN membuat materi atau TP di luar data di atas!"
+        return f"\n\n[SANGAT PENTING - MASTER SINKRONISASI DOKUMEN]\nKamu WAJIB mematuhi data dari seluruh Bab berikut agar semua dokumen dari Bab 1 hingga akhir selaras:\n{sinkron_text}\nJANGAN membuat materi atau TP di luar data di atas! Rangkum dan susun secara logis."
     return ""
 
 # ==============================================================================
-# PROMPT MODUL AJAR (TIDAK DIRUBAH)
+# PROMPT MODUL AJAR (PER BAB)
 # ==============================================================================
-def prompt_step_1(form):
-    return f"""Kamu pakar Kurikulum Merdeka Pendekatan Deep Learning Berbasis Cinta dengan 5 pilar (KBC). WAJIB JANGAN SAMPAI BUAT KESALAHAN SEDIKITPUN. Buat Bagian A & B modul gunakan bahasa yang humanis agar tidak terlihat AI, buat semua file menjadi lengkap, kompleks dan sempurna.
-untuk Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik: {form['bab']}. PENTING: CP dan TP WAJIB mengacu pada "KMA Nomor 1503 Tahun 2025" Untuk pemanfaata Digital Isi Minimal 3, Wajib Masukan semua Panca Cinta Cinta kepada Tuhan (Allah dan Rasul-Nya),Cinta kepada Diri dan Sesama, Cinta kepada Ilmu Pengetahuan, Cinta Lingkungan, Cinta Tanah Air.
-untuk Dimensi Profile Kelulusan masukan minimal 4 serta penjelasannya.
-PENTING: Balas HANYA dengan JSON valid. DILARANG menggunakan tanda kutip ganda (") di dalam teks string.
+def prompt_step_1(form, bab_name):
+    return f"""Kamu pakar Kurikulum Merdeka Pendekatan Deep Learning Berbasis Cinta dengan 5 pilar (KBC). WAJIB JANGAN SAMPAI BUAT KESALAHAN.
+Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik Khusus Modul Ini: {bab_name}. 
+PENTING: CP dan TP WAJIB mengacu pada "KMA Nomor 1503 Tahun 2025". Masukan minimal 3 Pemanfaatan Digital, serta Panca Cinta KBC.
 Balas HANYA JSON:
 {{"identifikasi": {{"pengetahuan_awal": ["str"], "minat_belajar": ["str"], "latar_belakang": "str", "kebutuhan_belajar": ["str"], "dimensi_profil": ["str"], "panca_cinta": ["str"]}}, "desain": {{"capaian_pembelajaran": "str", "tujuan_pembelajaran": ["str"], "lintas_disiplin": ["str"], "topik_pembelajaran": ["str"], "praktik_pedagogi": ["str"], "lingkungan_belajar": ["str"], "kemitraan_pembelajaran": ["str"], "pemanfaatan_digital": ["str"]}}}}"""
 
-def prompt_step_2(form, step1):
-    return f"""Lanjutkan modul {form['mapel']} {form['kelas']} bab {form['bab']}. Buat Pengalaman Belajar untuk TEPAT {form['jumlah_pertemuan']} pertemuan. Format 4 elemen untuk setiap kegiatan: fase, aktivitas, waktu, dl.
-PENTING: Balas HANYA dengan JSON valid. DILARANG menggunakan tanda kutip ganda (") di dalam teks string.
+def prompt_step_2(form, bab_name, jumlah_pertemuan, step1):
+    return f"""Lanjutkan modul {form['mapel']} {form['kelas']} bab {bab_name}. Buat Pengalaman Belajar untuk TEPAT {jumlah_pertemuan} pertemuan. Format 4 elemen untuk setiap kegiatan: fase, aktivitas, waktu, dl.
 Balas HANYA JSON:
-{{"pertemuan": [{{"nomor": 1, "materi": "str", "durasi": "str", "kegiatan": [{{"fase": "PEMBUKAAN", "aktivitas": ["str", "str"], "waktu": "5'", "dl": "Meaningful"}}, {{"fase": "INTI (MEMAHAMI)", "aktivitas": ["str", "str"], "waktu": "15'", "dl": "Mindful"}}, {{"fase": "INTI (MENGAPLIKASIKAN)", "aktivitas": ["str", "str"], "waktu": "10'", "dl": "Joyful"}}, {{"fase": "PENUTUP", "aktivitas": ["str"], "waktu": "5'", "dl": "Mindful"}}]}}]}}"""
+{{"pertemuan": [{{"nomor": 1, "materi": "str", "durasi": "str", "kegiatan": [{{"fase": "PEMBUKAAN", "aktivitas": ["str"], "waktu": "5'", "dl": "Meaningful"}}, {{"fase": "INTI (MEMAHAMI)", "aktivitas": ["str"], "waktu": "15'", "dl": "Mindful"}}, {{"fase": "INTI (MENGAPLIKASIKAN)", "aktivitas": ["str"], "waktu": "10'", "dl": "Joyful"}}, {{"fase": "PENUTUP", "aktivitas": ["str"], "waktu": "5'", "dl": "Mindful"}}]}}]}}"""
 
-def prompt_step_3(form, step2):
-    jumlah = form.get('jumlah_pertemuan', 1) 
-    return f"""Tahap akhir modul {form['mapel']} bab {form['bab']}. Buat asesmen, LKPD (BUAT TEPAT {jumlah} LKPD, SATU UNTUK SETIAP PERTEMUAN), remedial/pengayaan, glosarium, daftar pustaka.
-PENTING: Balas HANYA JSON VALID. Jangan gunakan kutip ganda (") di dalam nilai teks. "materi_ajar" cukup 1 paragraf padat agar tidak terpotong.
+def prompt_step_3(form, bab_name, jumlah_pertemuan, step2):
+    return f"""Tahap akhir modul {form['mapel']} bab {bab_name}. Buat asesmen, LKPD (BUAT TEPAT {jumlah_pertemuan} LKPD), remedial, glosarium. "materi_ajar" cukup 1 paragraf padat.
 Balas HANYA JSON:
-{{"penilaian": {{"awal": ["str"], "formatif": ["str"], "sumatif": ["str"]}}, "asesmen_lampiran": {{"awal_lisan": ["str"], "sumatif_hots": ["str"]}}, "materi_ajar": "str 1 paragraf padat", "lkpd": [{{"nomor": 1, "judul": "str", "memahami": "str", "mengaplikasikan": "str", "merefleksikan": "str"}}], "tindak_lanjut": {{"remedial": "str", "pengayaan": "str", "refleksi_siswa": ["str"], "refleksi_guru": ["str"]}}, "glosarium": [{{"istilah": "str", "definisi": "str"}}], "daftar_pustaka": ["str"]}}"""
+{{"penilaian": {{"awal": ["str"], "formatif": ["str"], "sumatif": ["str"]}}, "asesmen_lampiran": {{"awal_lisan": ["str"], "sumatif_hots": ["str"]}}, "materi_ajar": "str", "lkpd": [{{"nomor": 1, "judul": "str", "memahami": "str", "mengaplikasikan": "str", "merefleksikan": "str"}}], "tindak_lanjut": {{"remedial": "str", "pengayaan": "str", "refleksi_siswa": ["str"], "refleksi_guru": ["str"]}}, "glosarium": [{{"istilah": "str", "definisi": "str"}}], "daftar_pustaka": ["str"]}}"""
 
 # ==============================================================================
-# PROMPT DOKUMEN LAIN
+# PROMPT DOKUMEN LAIN (TERINTEGRASI MULTI-BAB & KMA 1503)
 # ==============================================================================
-def prompt_cp(form, d1_context=None, d2_context=None):
+def prompt_cp(form, aggregated_context):
     return f"""Buat dokumen Capaian Pembelajaran (CP) Mapel {form['mapel']} Fase/Kelas {form['kelas']}. 
-Sesuaikan dengan struktur berikut: A. Rasional, B. Tujuan, C. Tabel Elemen, D. Capaian Pembelajaran Fase.
+[ATURAN MUTLAK]: KONTEN CP WAJIB DAN HARUS SESUAI DENGAN KMA 1503 TAHUN 2025. {aggregated_context}
 Balas HANYA JSON: 
 {{"rasional": "str 1 paragraf", "tujuan": ["str"], "elemen": [{{"nama": "str", "deskripsi": "str"}}], "cp_paragraf": "str 1 paragraf", "cp_tabel": [{{"elemen": "str", "capaian": "str"}}]}}"""
 
-def prompt_atp(form, d1_context=None, d2_context=None):
-    sinkron = get_sinkronisasi_context(d1_context, d2_context)
-    return f"""Buat isi Alur Tujuan Pembelajaran (ATP) Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}.{sinkron}
-Tabel ATP harus berisi No, Elemen, Tujuan Pembelajaran (TP) per Bab, Alur Tujuan Pembelajaran (ATP), Materi Pokok, dan Alokasi Waktu.
+def prompt_atp(form, aggregated_context):
+    return f"""Buat isi Alur Tujuan Pembelajaran (ATP) Lengkap Mapel {form['mapel']} {form['kelas']}. 
+[ATURAN MUTLAK]: STRUKTUR DAN KONTEN WAJIB MENGACU KMA 1503 TAHUN 2025. {aggregated_context}
 Balas HANYA JSON: 
 {{"cp_fase": "str", "rows": [{{"no": "1", "elemen": "str", "tp": "str", "atp": "str", "materi": "str", "jp": "str"}}]}}"""
 
-def prompt_prota(form, d1_context=None, d2_context=None):
-    sinkron = get_sinkronisasi_context(d1_context, d2_context)
-    return f"""Buat isi Program Tahunan (PROTA) Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}.{sinkron} Total JP harus mencakup semua materi. 
-Kolom terdiri dari Semester (Ganjil/Genap), No, Materi Pokok/Bab, Alokasi Waktu (JP), dan Keterangan (contoh: "2 Pertemuan").
-Balas HANYA JSON: {{"rows": [{{"semester": "1 (Ganjil)", "no": "1", "materi": "str", "jp": "str", "keterangan": "str"}}]}}"""
+def prompt_prota(form, aggregated_context):
+    return f"""Buat Program Tahunan (PROTA) Mapel {form['mapel']} {form['kelas']}. Masukkan semua bab yang ada di master konteks.{aggregated_context}
+Balas HANYA JSON: {{"rows": [{{"semester": "1", "no": "1", "materi": "str", "jp": "str", "keterangan": "str"}}]}}"""
 
-def prompt_promes(form, d1_context=None, d2_context=None):
-    sinkron = get_sinkronisasi_context(d1_context, d2_context)
+def prompt_promes(form, aggregated_context):
     is_sem1 = "1" in form['semester']
     bulan = ["Juli", "Agustus", "September", "Oktober", "November", "Desember"] if is_sem1 else ["Januari", "Februari", "Maret", "April", "Mei", "Juni"]
-    return f"""Buat rincian Program Semester Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}. Pecah ke bulan {bulan}. "minggu" array angka minggu (1-5).{sinkron} 
+    return f"""Buat Program Semester Lengkap Mapel {form['mapel']} {form['kelas']}. Distribusikan materi dari semua bab ke bulan {bulan}.{aggregated_context} 
 Balas HANYA JSON: {{"rows": [{{"materi_tp": "str", "jp": "str", "bulan": "Juli", "minggu": [1, 2]}}]}}"""
 
-def prompt_kktp(form, d1_context=None, d2_context=None):
-    sinkron = get_sinkronisasi_context(d1_context, d2_context)
-    return f"""Buat Kriteria Ketercapaian Tujuan Pembelajaran (KKTP) Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}.{sinkron}
-Tabel berisi 2 kolom: Tujuan Pembelajaran dan Kriteria Ketercapaian (Indikator). 
+def prompt_kktp(form, aggregated_context):
+    return f"""Buat KKTP Mapel {form['mapel']} {form['kelas']} untuk SEMUA BAB.{aggregated_context}
 Balas HANYA JSON: {{"rows": [{{"tp": "str", "kriteria": "str"}}]}}"""
 
-def prompt_jurnal(form, d1_context=None, d2_context=None):
-    sinkron = get_sinkronisasi_context(d1_context, d2_context)
-    return f"""Buat isi Jurnal Mengajar Harian untuk TEPAT {form['jumlah_pertemuan']} pertemuan. Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}.{sinkron} Balas HANYA JSON: {{"rows": [{{"pertemuan": "1", "topik": "str", "aktivitas": "str (Aktivitas Deep Learning)", "asesmen": "str"}}]}}"""
+def prompt_jurnal(form, aggregated_context, total_pertemuan):
+    return f"""Buat Jurnal Mengajar Harian gabungan untuk total {total_pertemuan} pertemuan dari seluruh bab.{aggregated_context} 
+Balas HANYA JSON: {{"rows": [{{"pertemuan": "1", "topik": "str", "aktivitas": "str", "asesmen": "str"}}]}}"""
 
-def prompt_lkpd(form, d1_context=None, d2_context=None):
-    sinkron = get_sinkronisasi_context(d1_context, d2_context)
-    return f"""Buat Lembar Kerja Peserta Didik (LKPD) lengkap yang interaktif untuk {form['jumlah_pertemuan']} pertemuan. Mapel {form['mapel']} {form['kelas']} Topik {form['bab']}.{sinkron}
-LKPD ini akan dicetak dan dibagikan ke siswa. Balas HANYA JSON:
-{{"lkpd": [{{"pertemuan": 1, "topik": "str", "tujuan_kegiatan": "str", "alat_bahan": ["str"], "langkah_kerja": ["str"], "soal_latihan": ["str"]}}]}}"""
+def prompt_lkpd_global(form, aggregated_context, total_pertemuan):
+    return f"""Buat Buku LKPD Lengkap untuk total {total_pertemuan} pertemuan mencakup seluruh bab.{aggregated_context}
+Balas HANYA JSON: {{"lkpd": [{{"pertemuan": 1, "topik": "str", "tujuan_kegiatan": "str", "alat_bahan": ["str"], "langkah_kerja": ["str"], "soal_latihan": ["str"]}}]}}"""
 
 
 # ==============================================================================
-# FUNGSI PEMBANTU FORMATTING DOCX
+# FUNGSI PEMBANTU FORMATTING DOCX (Tetap Sama)
 # ==============================================================================
 def safe_list(val, default=None):
     if default is None: default = ["-"]
@@ -199,9 +193,7 @@ def safe_list(val, default=None):
 
 def set_cell_background(cell, hex_color):
     shd = OxmlElement("w:shd")
-    shd.set(qn("w:val"), "clear")
-    shd.set(qn("w:color"), "auto")
-    shd.set(qn("w:fill"), hex_color)
+    shd.set(qn("w:val"), "clear"); shd.set(qn("w:color"), "auto"); shd.set(qn("w:fill"), hex_color)
     cell._tc.get_or_add_tcPr().append(shd)
 
 def style_cell(cell, text, bold=False, color="000000", center=False, size=10, italic=False):
@@ -210,18 +202,13 @@ def style_cell(cell, text, bold=False, color="000000", center=False, size=10, it
     if center: p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
     run = p.add_run(str(text))
-    run.bold = bold
-    run.italic = italic
-    run.font.size = Pt(size)
+    run.bold = bold; run.italic = italic; run.font.size = Pt(size)
     run.font.color.rgb = RGBColor.from_string(color)
 
-def doc_bullet_style(cell):
-    return cell.paragraphs[0].style
+def doc_bullet_style(cell): return cell.paragraphs[0].style
 
 def banner(doc, text, hex_color, size=12):
-    table = doc.add_table(rows=1, cols=1)
-    table.autofit = True
-    table.columns[0].width = Cm(18)
+    table = doc.add_table(rows=1, cols=1); table.autofit = True; table.columns[0].width = Cm(18)
     cell = table.rows[0].cells[0]
     set_cell_background(cell, hex_color)
     style_cell(cell, text, bold=True, color="FFFFFF", size=size)
@@ -231,16 +218,14 @@ def banner(doc, text, hex_color, size=12):
 def field_table(doc):
     table = doc.add_table(rows=0, cols=2)
     table.autofit = False
-    table.columns[0].width = Cm(4.5)
-    table.columns[1].width = Cm(13.5)
+    table.columns[0].width = Cm(4.5); table.columns[1].width = Cm(13.5)
     return table
 
 def add_field_row(table, label, content_items):
     row = table.add_row()
     label_cell, value_cell = row.cells[0], row.cells[1]
     label_cell.width = Cm(4.5); value_cell.width = Cm(13.5)
-    set_cell_background(label_cell, COLOR_LABEL)
-    set_cell_background(value_cell, COLOR_VALUE)
+    set_cell_background(label_cell, COLOR_LABEL); set_cell_background(value_cell, COLOR_VALUE)
     style_cell(label_cell, label, bold=True, size=10.5)
 
     value_cell.text = ""
@@ -270,24 +255,19 @@ def add_signatures(doc, form, full_width=False):
     sig_table = doc.add_table(rows=1, cols=2)
     w = Cm(12) if full_width else Cm(9)
     sig_table.columns[0].width = w; sig_table.columns[1].width = w
-    p1 = sig_table.rows[0].cells[0].paragraphs[0]
-    p1.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p1 = sig_table.rows[0].cells[0].paragraphs[0]; p1.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p1.add_run(f"Mengetahui,\nKepala Sekolah {form['sekolah']}\n\n\n\n")
     p1.add_run(f"({form['kepala_madrasah']})").bold = True
     p1.add_run("\nNIP. .....................................")
     
-    p2 = sig_table.rows[0].cells[1].paragraphs[0]
-    p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p2 = sig_table.rows[0].cells[1].paragraphs[0]; p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p2.add_run(f"{form['titimangsa']}\nGuru Mata Pelajaran\n\n\n\n")
     p2.add_run(f"({form['penyusun']})").bold = True
     p2.add_run("\nNIP. .....................................")
 
 def create_header(doc, title, form):
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run(title)
-    run.bold = True
-    run.font.size = Pt(14)
+    p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = p.add_run(title); run.bold = True; run.font.size = Pt(14)
     doc.add_paragraph(f"Mata Pelajaran: {form['mapel']}")
     doc.add_paragraph(f"Nama Sekolah: {form['sekolah']}")
     if "Penyusun" in title or "ATP" in title or "KKTP" in title:
@@ -297,65 +277,48 @@ def create_header(doc, title, form):
     doc.add_paragraph()
 
 # ==============================================================================
-# BUILDERS (Semua Builder Tersedia Sesuai Format Sebelumnya)
+# BUILDERS (Cover & Document Builders)
 # ==============================================================================
 def build_cover(form: dict, jenis_cover: str) -> bytes:
     is_landscape = (jenis_cover in ["Cover Program Tahunan & Semester", "Cover CP", "Cover ATP"])
     doc = create_base_doc(landscape=is_landscape)
     for _ in range(4): doc.add_paragraph()
     judul_utama = "BUKU PERANGKAT PEMBELAJARAN\n"
-    if jenis_cover == "Cover Modul Ajar":
-        judul_utama = "MODUL AJAR\nKURIKULUM BERBASIS CINTA\n"
-    elif jenis_cover == "Cover Program Tahunan & Semester":
-        judul_utama = "PROGRAM TAHUNAN DAN SEMESTER\n"
-    elif jenis_cover == "Cover Jurnal Mengajar":
-        judul_utama = "JURNAL MENGAJAR HARIAN\n"
-    elif jenis_cover == "Cover CP":
-        judul_utama = "CAPAIAN PEMBELAJARAN (CP)\n"
-    elif jenis_cover == "Cover ATP":
-        judul_utama = "ALUR TUJUAN PEMBELAJARAN (ATP)\n"
-    elif jenis_cover == "Cover KKTP":
-        judul_utama = "KRITERIA KETERCAPAIAN TUJUAN PEMBELAJARAN (KKTP)\n"
-    p1 = doc.add_paragraph()
-    p1.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r1 = p1.add_run(judul_utama)
-    r1.bold = True
-    r1.font.size = Pt(22)
-    r1_sub = p1.add_run("(Pendekatan Deep Learning - KMA 1503/2025)")
-    r1_sub.font.size = Pt(14)
+    if jenis_cover == "Cover Modul Ajar": judul_utama = "MODUL AJAR\nKURIKULUM BERBASIS CINTA\n"
+    elif jenis_cover == "Cover Program Tahunan & Semester": judul_utama = "PROGRAM TAHUNAN DAN SEMESTER\n"
+    elif jenis_cover == "Cover Jurnal Mengajar": judul_utama = "JURNAL MENGAJAR HARIAN\n"
+    elif jenis_cover == "Cover CP": judul_utama = "CAPAIAN PEMBELAJARAN (CP)\n"
+    elif jenis_cover == "Cover ATP": judul_utama = "ALUR TUJUAN PEMBELAJARAN (ATP)\n"
+    elif jenis_cover == "Cover KKTP": judul_utama = "KRITERIA KETERCAPAIAN TUJUAN PEMBELAJARAN (KKTP)\n"
+    
+    p1 = doc.add_paragraph(); p1.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r1 = p1.add_run(judul_utama); r1.bold = True; r1.font.size = Pt(22)
+    r1_sub = p1.add_run("(Pendekatan Deep Learning - KMA 1503/2025)"); r1_sub.font.size = Pt(14)
     for _ in range(3): doc.add_paragraph()
-    p2 = doc.add_paragraph()
-    p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r2 = p2.add_run(f"Mata Pelajaran : {form['mapel']}\n")
-    r2.bold = True
-    r2.font.size = Pt(16)
+    
+    p2 = doc.add_paragraph(); p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r2 = p2.add_run(f"Mata Pelajaran : {form['mapel']}\n"); r2.bold = True; r2.font.size = Pt(16)
     r2_sub = p2.add_run(f"Kelas / Fase : {form['kelas']}\nSemester : {form['semester']}")
     r2_sub.font.size = Pt(14)
     for _ in range(5): doc.add_paragraph()
-    p3 = doc.add_paragraph()
-    p3.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r3_a = p3.add_run("Disusun Oleh:\n")
-    r3_a.font.size = Pt(14)
-    r3_b = p3.add_run(f"{form['penyusun']}")
-    r3_b.bold = True
-    r3_b.font.size = Pt(16)
+    
+    p3 = doc.add_paragraph(); p3.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r3_a = p3.add_run("Disusun Oleh:\n"); r3_a.font.size = Pt(14)
+    r3_b = p3.add_run(f"{form['penyusun']}"); r3_b.bold = True; r3_b.font.size = Pt(16)
     for _ in range(6): doc.add_paragraph()
-    p4 = doc.add_paragraph()
-    p4.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r4 = p4.add_run(f"{form['sekolah']}\n")
-    r4.bold = True
-    r4.font.size = Pt(18)
-    r4_sub = p4.add_run(f"Tahun Pelajaran {form['tahun_pelajaran']}")
-    r4_sub.bold = True
-    r4_sub.font.size = Pt(14)
+    
+    p4 = doc.add_paragraph(); p4.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r4 = p4.add_run(f"{form['sekolah']}\n"); r4.bold = True; r4.font.size = Pt(18)
+    r4_sub = p4.add_run(f"Tahun Pelajaran {form['tahun_pelajaran']}"); r4_sub.bold = True; r4_sub.font.size = Pt(14)
+    
     buf = io.BytesIO(); doc.save(buf); buf.seek(0)
     return buf.getvalue()
 
-def build_modul_ajar(form: dict, full_data: dict) -> bytes:
+def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data: dict) -> bytes:
     doc = create_base_doc(landscape=False)
-    d1 = full_data.get("step1", {})
-    d2 = full_data.get("step2", {})
-    d3 = full_data.get("step3", {})
+    d1 = full_data.get("d1", {})
+    d2 = full_data.get("d2", {})
+    d3 = full_data.get("d3", {})
 
     title_table = doc.add_table(rows=1, cols=1)
     cell = title_table.rows[0].cells[0]
@@ -367,13 +330,11 @@ def build_modul_ajar(form: dict, full_data: dict) -> bytes:
 
     banner(doc, "IDENTITAS MODUL AJAR", COLOR_IDENTITY_HEAD)
     identity = field_table(doc)
-    pertemuan_list = d2.get("pertemuan", [])
-    if not isinstance(pertemuan_list, list): pertemuan_list = []
     
     for label, value in [
         ("Mata Pelajaran", form["mapel"]), ("Kelas / Fase", form["kelas"]),
-        ("Semester", form["semester"]), ("Alokasi Waktu", f"{len(pertemuan_list)} Pertemuan x {form['alokasi']}"),
-        ("Bab / Topik", form["bab"]), ("Penyusun", form["penyusun"]),
+        ("Semester", form["semester"]), ("Alokasi Waktu", f"{jumlah_pertemuan} Pertemuan x {form['alokasi']}"),
+        ("Bab / Topik", bab_name), ("Penyusun", form["penyusun"]),
         ("Sekolah", form["sekolah"]), ("Tahun Pelajaran", form["tahun_pelajaran"])
     ]:
         add_field_row(identity, label, value)
@@ -405,12 +366,13 @@ def build_modul_ajar(form: dict, full_data: dict) -> bytes:
     add_field_row(desain, "Pemanfaatan Digital", safe_list(ds_data.get("pemanfaatan_digital")))
     doc.add_paragraph()
 
+    pertemuan_list = d2.get("pertemuan", [])
+    if not isinstance(pertemuan_list, list): pertemuan_list = []
+    
     for p in pertemuan_list:
         if not isinstance(p, dict): continue
-        materi = p.get("materi", "Materi Pembelajaran")
-        durasi = p.get("durasi", form['alokasi'])
         doc.add_heading(f"PENGALAMAN BELAJAR – PERTEMUAN {p.get('nomor', '1')}", level=2)
-        doc.add_paragraph(f"Materi: {materi}\nDurasi: {durasi}")
+        doc.add_paragraph(f"Materi: {p.get('materi', 'Materi')}\nDurasi: {p.get('durasi', form['alokasi'])}")
         
         t_pb = doc.add_table(rows=1, cols=4)
         t_pb.style = 'Table Grid'
@@ -418,10 +380,9 @@ def build_modul_ajar(form: dict, full_data: dict) -> bytes:
         t_pb.columns[2].width = Cm(1.5); t_pb.columns[3].width = Cm(3.0)
         
         hdr = t_pb.rows[0].cells
-        headers = ["FASE KEGIATAN", "AKTIVITAS PEMBELAJARAN", "WAKTU", "PRINSIP DL"]
-        for i in range(4):
+        for i, h in enumerate(["FASE KEGIATAN", "AKTIVITAS PEMBELAJARAN", "WAKTU", "PRINSIP DL"]):
             set_cell_background(hdr[i], COLOR_LABEL)
-            style_cell(hdr[i], headers[i], bold=True, center=True)
+            style_cell(hdr[i], h, bold=True, center=True)
             
         kegiatan_list = p.get("kegiatan", [])
         if isinstance(kegiatan_list, list):
@@ -431,10 +392,7 @@ def build_modul_ajar(form: dict, full_data: dict) -> bytes:
                 row.cells[0].text = str(keg.get("fase", ""))
                 
                 akt_list = keg.get("aktivitas", [])
-                if isinstance(akt_list, list):
-                    txt_akt = "\n".join([f"- {a}" for a in akt_list])
-                else:
-                    txt_akt = str(akt_list)
+                txt_akt = "\n".join([f"- {a}" for a in akt_list]) if isinstance(akt_list, list) else str(akt_list)
                 
                 row.cells[1].text = txt_akt
                 row.cells[2].text = str(keg.get("waktu", "-"))
@@ -453,28 +411,9 @@ def build_modul_ajar(form: dict, full_data: dict) -> bytes:
     banner(doc, "LAMPIRAN I – ASESMEN", COLOR_LAMPIRAN_I)
     asesmen_lamp = d3.get("asesmen_lampiran", {})
     if not isinstance(asesmen_lamp, dict): asesmen_lamp = {}
-    
     doc.add_heading("A. ASESMEN AWAL (LISAN)", level=3)
     for a in safe_list(asesmen_lamp.get("awal_lisan")): doc.add_paragraph(f"• {a}")
-    
-    doc.add_heading("B. RUBRIK PENILAIAN SIKAP (Skala 1-4)", level=3)
-    t_sikap = doc.add_table(rows=5, cols=5)
-    t_sikap.style = 'Table Grid'
-    h_sikap = ["Aspek Sikap", "Skor 4 (Sangat Baik)", "Skor 3 (Baik)", "Skor 2 (Cukup)", "Skor 1 (Perlu Bimb.)"]
-    for i, h in enumerate(h_sikap):
-        set_cell_background(t_sikap.cell(0, i), COLOR_LABEL)
-        style_cell(t_sikap.cell(0, i), h, bold=True, center=True)
-    sikap_data = [
-        ["Disiplin", "Selalu hadir & taat", "Hadir tepat waktu", "Sering terlambat", "Sering absen"],
-        ["Tanggung Jawab", "Tugas tepat & baik", "Tugas selesai", "Sering terlambat", "Tidak dikerjakan"],
-        ["Kerjasama", "Sangat aktif", "Aktif", "Kurang aktif", "Tidak peduli"],
-        ["Toleransi", "Sangat menghargai", "Menghargai", "Kurang menghargai", "Tidak menghargai"]
-    ]
-    for r_idx, row_data in enumerate(sikap_data, start=1):
-        for c_idx, cell_data in enumerate(row_data):
-            style_cell(t_sikap.cell(r_idx, c_idx), cell_data)
-            
-    doc.add_heading("C. ASESMEN SUMATIF (SOAL HOTS)", level=3)
+    doc.add_heading("B. ASESMEN SUMATIF (SOAL HOTS)", level=3)
     for i, a in enumerate(safe_list(asesmen_lamp.get("sumatif_hots")), 1): doc.add_paragraph(f"{i}. {a}")
     doc.add_paragraph()
 
@@ -482,15 +421,12 @@ def build_modul_ajar(form: dict, full_data: dict) -> bytes:
     doc.add_paragraph(str(d3.get("materi_ajar", "-")))
     doc.add_paragraph()
     
-    banner(doc, "LAMPIRAN III – LKPD (LEMBAR KERJA PESERTA DIDIK)", COLOR_LAMPIRAN_III)
-    doc.add_paragraph("(Catatan: Untuk format siap cetak, silakan gunakan file dokumen LKPD Cetak yang ter-generate secara terpisah)")
+    banner(doc, "LAMPIRAN III – LKPD", COLOR_LAMPIRAN_III)
     lkpd_data = d3.get("lkpd", [])
     if isinstance(lkpd_data, list):
         for p in lkpd_data:
             if not isinstance(p, dict): continue
             doc.add_heading(f"LKPD PERTEMUAN {p.get('nomor', '')} – {p.get('judul', 'Tugas')}", level=3)
-            doc.add_paragraph("Pedoman: Memahami (40) + Mengaplikasikan (40) + Merefleksikan (20) = 100")
-            
             t_lkpd = doc.add_table(rows=3, cols=2)
             t_lkpd.style = 'Table Grid'
             t_lkpd.columns[0].width = Cm(4.5); t_lkpd.columns[1].width = Cm(13.5)
@@ -503,28 +439,14 @@ def build_modul_ajar(form: dict, full_data: dict) -> bytes:
                 style_cell(t_lkpd.cell(i, 1), str(v))
             doc.add_paragraph()
 
-    banner(doc, "LAMPIRAN V – TINDAK LANJUT DAN REFLEKSI", COLOR_LAMPIRAN_V)
+    banner(doc, "LAMPIRAN V – TINDAK LANJUT", COLOR_LAMPIRAN_V)
     tl = d3.get("tindak_lanjut", {})
     if not isinstance(tl, dict): tl = {}
     doc.add_heading("A. PROGRAM REMEDIAL", level=3); doc.add_paragraph(str(tl.get("remedial", "-")))
     doc.add_heading("B. PROGRAM PENGAYAAN", level=3); doc.add_paragraph(str(tl.get("pengayaan", "-")))
     doc.add_heading("C. REFLEKSI", level=3)
-    doc.add_paragraph("Refleksi Peserta Didik:")
     for r in safe_list(tl.get("refleksi_siswa")): doc.add_paragraph(f"- {r}")
-    doc.add_paragraph("Refleksi Guru:")
-    for r in safe_list(tl.get("refleksi_guru")): doc.add_paragraph(f"- {r}")
     doc.add_paragraph()
-
-    banner(doc, "GLOSARIUM & DAFTAR PUSTAKA", COLOR_TITLE)
-    doc.add_heading("GLOSARIUM", level=3)
-    glosarium_data = d3.get("glosarium", [])
-    if isinstance(glosarium_data, list):
-        for g in glosarium_data:
-            if isinstance(g, dict):
-                doc.add_paragraph(f"• {g.get('istilah', '')}: {str(g.get('definisi', ''))}")
-            
-    doc.add_heading("DAFTAR PUSTAKA", level=3)
-    for dp in safe_list(d3.get("daftar_pustaka")): doc.add_paragraph(f"- {dp}")
 
     add_signatures(doc, form)
     buf = io.BytesIO(); doc.save(buf); buf.seek(0)
@@ -532,22 +454,12 @@ def build_modul_ajar(form: dict, full_data: dict) -> bytes:
 
 def build_cp(form, ai_data):
     doc = create_base_doc(landscape=False)
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run("CAPAIAN PEMBELAJARAN (CP)")
-    run.bold = True
-    run.font.size = Pt(14)
-    doc.add_paragraph(f"Mata Pelajaran: {form['mapel']}")
-    doc.add_paragraph(f"Fase / Kelas: {form['kelas']}")
-    doc.add_paragraph()
+    create_header(doc, "CAPAIAN PEMBELAJARAN (CP)", form)
     doc.add_heading("A. Rasional Mata Pelajaran", level=3)
     doc.add_paragraph(ai_data.get("rasional", ""))
     doc.add_heading("B. Tujuan Mata Pelajaran", level=3)
-    doc.add_paragraph(f"Mata pelajaran {form['mapel']} bertujuan agar peserta didik dapat:")
     for t in safe_list(ai_data.get("tujuan", [])):
-        p = doc.add_paragraph()
-        p.style = 'List Bullet'
-        p.add_run(t)
+        doc.add_paragraph(t, style='List Bullet')
     doc.add_heading("C. Elemen-elemen Mata Pelajaran", level=3)
     t_elemen = doc.add_table(rows=1, cols=2)
     t_elemen.style = 'Table Grid'
@@ -576,12 +488,6 @@ def build_cp(form, ai_data):
 def build_atp(form, ai_data):
     doc = create_base_doc(landscape=True)
     create_header(doc, "ALUR TUJUAN PEMBELAJARAN (ATP)", form)
-    cp_fase = ai_data.get("cp_fase", "")
-    if cp_fase:
-        p = doc.add_paragraph()
-        p.add_run("Capaian Pembelajaran Fase:\n").bold = True
-        p.add_run(cp_fase)
-        doc.add_paragraph()
     table = doc.add_table(rows=1, cols=6)
     table.style = 'Table Grid'
     headers = ["No.", "Elemen", "Tujuan Pembelajaran (TP) per Bab", "Alur Tujuan Pembelajaran (ATP)", "Materi Pokok", "Alokasi Waktu (JP)"]
@@ -671,31 +577,23 @@ def build_kktp(form, ai_data):
     create_header(doc, "KRITERIA KETERCAPAIAN TUJUAN PEMBELAJARAN (KKTP)", form)
     table = doc.add_table(rows=1, cols=2)
     table.style = 'Table Grid'
-    headers = ["Tujuan Pembelajaran (TP)", "Kriteria Ketercapaian (Indikator)"]
-    for i, h in enumerate(headers):
+    for i, h in enumerate(["Tujuan Pembelajaran (TP)", "Kriteria Ketercapaian (Indikator)"]):
         set_cell_background(table.cell(0, i), "EFEFEF")
         style_cell(table.cell(0, i), h, bold=True, center=True)
     for row in safe_list(ai_data.get("rows"), []):
         if not isinstance(row, dict): continue
         r = table.add_row().cells
-        style_cell(r[0], row.get("tp", ""))
-        style_cell(r[1], row.get("kriteria", ""))
-    doc.add_paragraph("\nKeterangan Tingkat Ketercapaian:").bold = True
-    doc.add_paragraph("Perlu Bimbingan: Peserta didik belum mampu memenuhi kriteria dan memerlukan bimbingan pada hampir seluruh bagian.")
-    doc.add_paragraph("Cukup: Peserta didik mampu memenuhi sebagian kriteria namun belum konsisten atau masih memerlukan sedikit bantuan.")
-    doc.add_paragraph("Baik: Peserta didik mampu memenuhi seluruh kriteria yang ditetapkan secara mandiri.")
-    doc.add_paragraph("Sangat Baik: Peserta didik mampu memenuhi seluruh kriteria dengan analisis yang lebih mendalam, kritis, dan mampu mengaplikasikannya pada konteks baru.")
+        style_cell(r[0], row.get("tp", "")); style_cell(r[1], row.get("kriteria", ""))
     add_signatures(doc, form)
     buf = io.BytesIO(); doc.save(buf); buf.seek(0)
     return buf.getvalue()
 
 def build_jurnal(form, ai_data):
     doc = create_base_doc(landscape=False)
-    create_header(doc, "JURNAL MENGAJAR HARIAN", form)
+    create_header(doc, "JURNAL MENGAJAR HARIAN (GABUNGAN)", form)
     table = doc.add_table(rows=1, cols=5)
     table.style = 'Table Grid'
-    headers = ["Pertemuan", "Topik / Materi", "Aktivitas Deep Learning", "Asesmen", "Ket/Paraf"]
-    for i, h in enumerate(headers):
+    for i, h in enumerate(["Pertemuan", "Topik / Materi", "Aktivitas", "Asesmen", "Ket/Paraf"]):
         set_cell_background(table.cell(0, i), COLOR_TITLE)
         style_cell(table.cell(0, i), h, bold=True, color="FFFFFF", center=True)
     for row in safe_list(ai_data.get("rows"), []):
@@ -710,28 +608,19 @@ def build_jurnal(form, ai_data):
 
 def build_lkpd(form, ai_data):
     doc = create_base_doc(landscape=False)
-    lkpd_list = ai_data.get("lkpd", [])
-    if not isinstance(lkpd_list, list): lkpd_list = []
-    for item in lkpd_list:
+    for item in safe_list(ai_data.get("lkpd", [])):
         if not isinstance(item, dict): continue
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        r = p.add_run("LEMBAR KERJA PESERTA DIDIK (LKPD)\n")
-        r.bold = True
-        r.font.size = Pt(16)
+        p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r = p.add_run("LEMBAR KERJA PESERTA DIDIK (LKPD)\n"); r.bold = True; r.font.size = Pt(16)
         p.add_run(f"Mata Pelajaran: {form['mapel']} | Kelas: {form['kelas']}")
         doc.add_heading(f"LKPD Pertemuan {item.get('pertemuan', '')} - {item.get('topik', '')}", level=2)
         table = doc.add_table(rows=3, cols=1)
         table.style = 'Table Grid'
-        p1 = table.cell(0, 0).paragraphs[0]
-        p1.add_run("Nama Kelompok / Siswa  : ................................................................................").bold = True
-        p2 = table.cell(1, 0).paragraphs[0]
-        p2.add_run("Kelas                  : ................................................................................").bold = True
-        p3 = table.cell(2, 0).paragraphs[0]
-        p3.add_run("Hari, Tanggal          : ................................................................................").bold = True
+        table.cell(0, 0).paragraphs[0].add_run("Nama Kelompok / Siswa  : ...................................................").bold = True
+        table.cell(1, 0).paragraphs[0].add_run("Kelas                  : ...................................................").bold = True
+        table.cell(2, 0).paragraphs[0].add_run("Hari, Tanggal          : ...................................................").bold = True
         doc.add_paragraph()
-        doc.add_heading("A. Tujuan Kegiatan", level=3)
-        doc.add_paragraph(str(item.get("tujuan_kegiatan", "-")))
+        doc.add_heading("A. Tujuan Kegiatan", level=3); doc.add_paragraph(str(item.get("tujuan_kegiatan", "-")))
         doc.add_heading("B. Alat dan Bahan (Jika Ada)", level=3)
         for ab in safe_list(item.get("alat_bahan")): doc.add_paragraph(f"- {ab}")
         doc.add_heading("C. Langkah Kerja", level=3)
@@ -739,30 +628,38 @@ def build_lkpd(form, ai_data):
         doc.add_heading("D. Tugas / Soal Latihan", level=3)
         for i, soal in enumerate(safe_list(item.get("soal_latihan")), 1):
             doc.add_paragraph(f"{i}. {soal}")
-            for _ in range(4): doc.add_paragraph()
+            for _ in range(3): doc.add_paragraph()
         doc.add_page_break()
     buf = io.BytesIO(); doc.save(buf); buf.seek(0)
     return buf.getvalue()
 
-
 # ==============================================================================
-# UI STREAMLIT (ALUR EKSEKUSI BERTAHAP / ANTI-ERROR)
+# UI STREAMLIT (SISTEM MULTI-BAB)
 # ==============================================================================
-st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.3 ")
-st.markdown("*Berbasis Model Lagos AI 9.1 - Alur Bertahap Anti-Limit*")
+st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4 ")
+st.markdown("*Berbasis Model Lagos AI 9.1 - Multi-Bab & Terintegrasi Master KMA 1503*")
 
 with st.form("form_modul"):
     col1, col2 = st.columns(2)
     with col1:
-        mapel = st.text_input("Mata Pelajaran", placeholder="Matematika")
-        bab = st.text_input("Bab / Topik", placeholder="Bab 1: Pecahan dan Desimal")
+        mapel = st.text_input("Mata Pelajaran", placeholder="Contoh: Fikih")
         kelas = st.selectbox("Jenjang / Kelas", list(JENJANG_FASE.keys()), index=6) 
         semester = st.selectbox("Semester", ["1 (Satu)", "2 (Dua)"])
     with col2:
-        jumlah_pertemuan = st.number_input("Jumlah Pertemuan (Modul, Jurnal, LKPD)", min_value=1, max_value=8, value=2)
-        alokasi = st.text_input("Alokasi Waktu", value="4 JP x 35 menit")
+        alokasi = st.text_input("Alokasi Waktu per Pertemuan", value="4 JP x 35 menit")
         sekolah = st.text_input("Sekolah", value="MI Miftahussalam")
         tahun_pelajaran = st.text_input("Tahun Pelajaran", value="2026/2027")
+
+    st.divider()
+    st.markdown("### 📚 Data Bab Pembelajaran (Multi-Bab)")
+    st.info("Tambahkan baris baru di tabel ini untuk membuat lebih dari 1 Bab secara otomatis. Modul Ajar akan di-generate untuk masing-masing Bab, sedangkan Dokumen seperti ATP/Prota akan dirangkum dari seluruh Bab di bawah ini.")
+    
+    df_bab_default = pd.DataFrame([
+        {"Bab / Topik": "Bab 1: Ketentuan Zakat Fitrah", "Jumlah Pertemuan": 2},
+        {"Bab / Topik": "Bab 2: Ketentuan Infak dan Sedekah", "Jumlah Pertemuan": 2}
+    ])
+    
+    tabel_bab = st.data_editor(df_bab_default, num_rows="dynamic", use_container_width=True)
 
     st.divider()
     col3, col4 = st.columns(2)
@@ -772,45 +669,35 @@ with st.form("form_modul"):
 
     with col3:
         titimangsa = st.text_input("Titimangsa", value=titimangsa_otomatis)
-        penyusun = st.text_input("Penyusun (Guru)", placeholder="Erian Kurniawan, S.E")
+        penyusun = st.text_input("Penyusun (Guru)", placeholder="Nama Guru, S.Pd.")
     with col4:
-        kepala_madrasah = st.text_input("Kepala Madrasah", placeholder="Drs. Andi Supriadi")
+        kepala_madrasah = st.text_input("Kepala Madrasah", placeholder="Nama Kepala Sekolah")
 
     st.divider()
     
     jenis_cover = st.selectbox(
         "Pilih Jenis Cover yang Ingin Dibuat",
-        [
-            "Tanpa Cover", 
-            "Cover Administrasi Guru (Buku Umum)",
-            "Cover Modul Ajar",
-            "Cover Program Tahunan & Semester",
-            "Cover Jurnal Mengajar",
-            "Cover CP",
-            "Cover ATP",
-            "Cover KKTP"
-        ]
+        ["Tanpa Cover", "Cover Administrasi Guru (Buku Umum)", "Cover Modul Ajar", "Cover Program Tahunan & Semester", "Cover Jurnal Mengajar", "Cover CP", "Cover ATP", "Cover KKTP"]
     )
     
     pilihan_dokumen = st.multiselect(
         "Pilih dokumen yang ingin di-generate otomatis",
-        ["Modul Ajar", "Capaian Pembelajaran (CP)", "Alur Tujuan Pembelajaran (ATP)", "Prota", "Promes", "KKTP", "Jurnal Mengajar", "LKPD Siswa (Cetak)"],
-        default=["Modul Ajar", "Capaian Pembelajaran (CP)"]
+        ["Modul Ajar (Per Bab)", "Capaian Pembelajaran (CP)", "Alur Tujuan Pembelajaran (ATP)", "Prota", "Promes", "KKTP", "Jurnal Mengajar (Global)", "LKPD Siswa (Global)"],
+        default=["Modul Ajar (Per Bab)", "Capaian Pembelajaran (CP)", "Alur Tujuan Pembelajaran (ATP)"]
     )
 
-    submitted = st.form_submit_button("✨ Eksekusi & Generate Dokumen", use_container_width=True)
+    submitted = st.form_submit_button("✨ Eksekusi & Generate Semua Dokumen", use_container_width=True)
 
 if submitted:
-    if not (mapel and bab and penyusun and sekolah and kepala_madrasah):
-        st.warning("Lengkapi minimal Mata Pelajaran, Bab/Topik, Penyusun, Kepala, dan Sekolah.")
-    elif not pilihan_dokumen and jenis_cover == "Tanpa Cover":
-        st.warning("Silakan pilih minimal 1 dokumen atau cover yang ingin dibuat.")
+    if not (mapel and penyusun and sekolah and kepala_madrasah):
+        st.warning("Lengkapi data identitas (Mapel, Penyusun, Sekolah, Kepala).")
+    elif tabel_bab.empty or tabel_bab["Bab / Topik"].isnull().all():
+        st.warning("Harap isi setidaknya 1 Bab pada tabel.")
     else:
         form = dict(
-            mapel=mapel, bab=bab, kelas=kelas, semester=semester,
-            jumlah_pertemuan=int(jumlah_pertemuan), alokasi=alokasi,
-            penyusun=penyusun, sekolah=sekolah, tahun_pelajaran=tahun_pelajaran,
-            titimangsa=titimangsa, kepala_madrasah=kepala_madrasah
+            mapel=mapel, kelas=kelas, semester=semester,
+            alokasi=alokasi, penyusun=penyusun, sekolah=sekolah, 
+            tahun_pelajaran=tahun_pelajaran, titimangsa=titimangsa, kepala_madrasah=kepala_madrasah
         )
         safe_mapel = re.sub(r'[^a-zA-Z0-9_\-]', '_', form['mapel'])
         safe_kelas = re.sub(r'[^a-zA-Z0-9_\-]', '_', form['kelas'].split()[0])
@@ -822,84 +709,98 @@ if submitted:
                 cover_status = st.empty()
                 cover_status.info(f"📄 Membuat {jenis_cover}...")
                 doc_bytes = build_cover(form, jenis_cover)
-                filename = f"{jenis_cover.replace(' & ', '_').replace(' ', '_')}_{safe_mapel}_{safe_kelas}.docx"
-                st.session_state["hasil_generate"][filename] = doc_bytes
+                st.session_state["hasil_generate"][f"{jenis_cover}_{safe_mapel}.docx"] = doc_bytes
                 cover_status.success(f"✅ Selesai membuat {jenis_cover}")
-                time.sleep(1)
 
-            # === 2. BIKIN "OTAK UTAMA" (TAHAP 1 & 2 DARI MODUL AJAR) ===
-            st.markdown("### 🧠 Proses Pembuatan Master Data & Modul Ajar (3 Tahap)")
+            # === 2. PROSES MODUL AJAR (LOOPING MULTI-BAB) ===
+            all_chapters_data = []
+            total_pertemuan_global = 0
             
-            # Tahap 1
-            step1_status = st.empty()
-            step1_status.info("⏳ Tahap 1/3: Merancang Desain Pembelajaran (Identitas, CP, TP, & Pilar KBC)...")
-            d1_context = call_ai(prompt_step_1(form))
-            step1_status.success("✅ Tahap 1 Selesai!")
-            time.sleep(5) # Delay diperbesar agar API aman dari rate-limit awal
+            # Konversi dataframe pandas ke list of dict
+            daftar_bab = tabel_bab.dropna(subset=["Bab / Topik"]).to_dict('records')
             
-            # Tahap 2
-            step2_status = st.empty()
-            step2_status.info("⏳ Tahap 2/3: Menyusun Pengalaman Belajar (Deep Learning) & Rincian Pertemuan...")
-            d2_context = call_ai(prompt_step_2(form, d1_context))
-            step2_status.success("✅ Tahap 2 Selesai!")
-            time.sleep(5) # Delay diperbesar lagi
-
-            # === 3. GENERATE DOKUMEN BERTAHAP (ANTREAN) ===
-            st.markdown("### ⚙️ Pemrosesan Dokumen Antrean (Satu-per-Satu)")
-            progress_bar = st.progress(0)
-            total_docs = len(pilihan_dokumen)
-            
-            for i, tipe in enumerate(pilihan_dokumen):
-                doc_status = st.empty()
+            if "Modul Ajar (Per Bab)" in pilihan_dokumen or True: # Tetap harus di proses untuk master konteks
+                st.markdown("### 🧠 Proses Pembuatan Master Data & Modul Ajar (Per Bab)")
                 
+                for idx, row in enumerate(daftar_bab):
+                    bab_name = str(row["Bab / Topik"])
+                    try: 
+                        jml_pert = int(row["Jumlah Pertemuan"])
+                    except: 
+                        jml_pert = 2
+                    
+                    total_pertemuan_global += jml_pert
+                    safe_bab = re.sub(r'[^a-zA-Z0-9_\-]', '_', bab_name)
+                    
+                    st.write(f"🔄 **Sedang memproses {bab_name}...**")
+                    
+                    st.info("Tahap 1: Desain Pembelajaran...")
+                    d1_ctx = call_ai(prompt_step_1(form, bab_name))
+                    time.sleep(3)
+                    
+                    st.info("Tahap 2: Pengalaman Belajar & Pertemuan...")
+                    d2_ctx = call_ai(prompt_step_2(form, bab_name, jml_pert, d1_ctx))
+                    time.sleep(3)
+                    
+                    st.info("Tahap 3: Asesmen & Lampiran...")
+                    d3_ctx = call_ai(prompt_step_3(form, bab_name, jml_pert, d2_ctx))
+                    
+                    chapter_data = {"bab": bab_name, "jml_pert": jml_pert, "d1": d1_ctx, "d2": d2_ctx, "d3": d3_ctx}
+                    all_chapters_data.append(chapter_data)
+                    
+                    # Generate File Modul Ajar khusus bab ini jika dipilih
+                    if "Modul Ajar (Per Bab)" in pilihan_dokumen:
+                        doc_bytes = build_modul_ajar(form, bab_name, jml_pert, chapter_data)
+                        filename = f"Modul_Ajar_{safe_mapel}_Bab_{idx+1}_{safe_bab}.docx"
+                        st.session_state["hasil_generate"][filename] = doc_bytes
+                        st.success(f"✅ Berhasil membuat Modul Ajar: {bab_name}")
+                    
+                    time.sleep(5) # Jeda antar bab
+            
+            # === 3. SINKRONISASI KONTEKS GLOBAL ===
+            master_context = get_aggregated_sinkronisasi_context(all_chapters_data)
+
+            # === 4. GENERATE DOKUMEN ADMINISTRASI LAIN (MEMAKAI MASTER CONTEXT) ===
+            st.markdown("### ⚙️ Pemrosesan Dokumen Administrasi Sinkronisasi")
+            dokumen_admin = [d for d in pilihan_dokumen if d != "Modul Ajar (Per Bab)"]
+            
+            for tipe in dokumen_admin:
+                doc_status = st.empty()
                 try:
-                    if tipe == "Modul Ajar":
-                        doc_status.info(f"🔄 Sedang memproses: {tipe} (Tahap 3/3: Asesmen, Penilaian, LKPD & Lampiran)...")
-                        d3_context = call_ai(prompt_step_3(form, d2_context))
-                        doc_bytes = build_modul_ajar(form, {"step1": d1_context, "step2": d2_context, "step3": d3_context})
-                    elif tipe == "Capaian Pembelajaran (CP)":
-                        doc_status.info(f"🔄 Sedang memproses: {tipe}...")
-                        ai_data = call_ai(prompt_cp(form, d1_context, d2_context))
+                    doc_status.info(f"🔄 Mensinkronkan & memproses: {tipe} (Sesuai KMA 1503)...")
+                    
+                    if tipe == "Capaian Pembelajaran (CP)":
+                        ai_data = call_ai(prompt_cp(form, master_context))
                         doc_bytes = build_cp(form, ai_data)
                     elif tipe == "Alur Tujuan Pembelajaran (ATP)":
-                        doc_status.info(f"🔄 Sedang memproses: {tipe}...")
-                        ai_data = call_ai(prompt_atp(form, d1_context, d2_context))
+                        ai_data = call_ai(prompt_atp(form, master_context))
                         doc_bytes = build_atp(form, ai_data)
                     elif tipe == "Prota":
-                        doc_status.info(f"🔄 Sedang memproses: {tipe}...")
-                        ai_data = call_ai(prompt_prota(form, d1_context, d2_context))
+                        ai_data = call_ai(prompt_prota(form, master_context))
                         doc_bytes = build_prota(form, ai_data)
                     elif tipe == "Promes":
-                        doc_status.info(f"🔄 Sedang memproses: {tipe}...")
-                        ai_data = call_ai(prompt_promes(form, d1_context, d2_context))
+                        ai_data = call_ai(prompt_promes(form, master_context))
                         doc_bytes = build_promes(form, ai_data)
                     elif tipe == "KKTP":
-                        doc_status.info(f"🔄 Sedang memproses: {tipe}...")
-                        ai_data = call_ai(prompt_kktp(form, d1_context, d2_context))
+                        ai_data = call_ai(prompt_kktp(form, master_context))
                         doc_bytes = build_kktp(form, ai_data)
-                    elif tipe == "Jurnal Mengajar":
-                        doc_status.info(f"🔄 Sedang memproses: {tipe}...")
-                        ai_data = call_ai(prompt_jurnal(form, d1_context, d2_context))
+                    elif tipe == "Jurnal Mengajar (Global)":
+                        ai_data = call_ai(prompt_jurnal(form, master_context, total_pertemuan_global))
                         doc_bytes = build_jurnal(form, ai_data)
-                    elif tipe == "LKPD Siswa (Cetak)":
-                        doc_status.info(f"🔄 Sedang memproses: {tipe}...")
-                        ai_data = call_ai(prompt_lkpd(form, d1_context, d2_context))
+                    elif tipe == "LKPD Siswa (Global)":
+                        ai_data = call_ai(prompt_lkpd_global(form, master_context, total_pertemuan_global))
                         doc_bytes = build_lkpd(form, ai_data)
                     
-                    # Menyimpan hasil ke session state
                     safe_tipe = tipe.replace(" & ", "_").replace(" ", "_").replace("(", "").replace(")", "")
-                    filename = f"{safe_tipe}_{safe_mapel}_{safe_kelas}.docx"
-                    st.session_state["hasil_generate"][filename] = doc_bytes
+                    st.session_state["hasil_generate"][f"{safe_tipe}_{safe_mapel}_Full_Semester.docx"] = doc_bytes
                     
-                    doc_status.success(f"✅ Berhasil membuat dokumen: {tipe}")
-                    time.sleep(10) # Jeda diperbesar menjadi 10 detik setiap 1 dokumen berhasil agar antrean benar-benar lepas dari Limit
+                    doc_status.success(f"✅ Berhasil membuat & mensinkronkan: {tipe}")
+                    time.sleep(8) 
                     
                 except Exception as e:
                     doc_status.error(f"❌ Gagal memproses {tipe}: {e}")
-                    
-                progress_bar.progress((i + 1) / total_docs)
             
-            st.success("🎉 Selesai! Semua dokumen berhasil digenerate secara bertahap tanpa error.")
+            st.success("🎉 Selesai! Seluruh Ekosistem Dokumen Administrasi Anda Berhasil Dibuat dan Disinkronkan.")
             
         except Exception as e:
             st.error(f"Terjadi kesalahan sistem: {e}")
