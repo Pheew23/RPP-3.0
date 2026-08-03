@@ -107,7 +107,7 @@ def get_sinkronisasi_context(d1_context, d2_context):
 # PROMPT MODUL AJAR (DIKEMBALIKAN 100% KE VERSI ASLI MILIK USER)
 # ==============================================================================
 def prompt_step_1(form):
-    return f"""Kamu pakar Kurikulum Merdeka Pendekatan Deep Learning Berbasis Cinta dengan 5 pilar (KBC). Buat Bagian A & B modul gunakan bahasa yang humanis agar tidak terlihat AI, buat semua file menjadi lengkap, kompleks dan sempurna.
+    return f"""Kamu pakar Kurikulum Merdeka Pendekatan Deep Learning Berbasis Cinta dengan 5 pilar (KBC). WAJIB JANGAN SAMPAI BUAT KESALAHAN SEDIKITPUN. Buat Bagian A & B modul gunakan bahasa yang humanis agar tidak terlihat AI, buat semua file menjadi lengkap, kompleks dan sempurna.
 untuk Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik: {form['bab']}. PENTING: CP dan TP WAJIB mengacu pada "KMA Nomor 1503 Tahun 2025" Untuk pemanfaata Digital Isi Minimal 3, Wajib Masukan semua Panca Cinta Cinta kepada Tuhan (Allah dan Rasul-Nya),Cinta kepada Diri dan Sesama, Cinta kepada Ilmu Pengetahuan, Cinta Lingkungan, Cinta Tanah Air.
 untuk Dimensi Profile Kelulusan masukan minimal 4 serta penjelasannya.
 PENTING: Balas HANYA dengan JSON valid. DILARANG menggunakan tanda kutip ganda (") di dalam teks string.
