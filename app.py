@@ -60,11 +60,25 @@ def get_client():
 
 def call_ai(prompt: str, temperature=0.7) -> dict:
     client = get_client()
-    response = client.chat.completions.create(
-        model=MODEL_NAME, messages=[{"role": "user", "content": prompt}],
-        temperature=temperature, max_tokens=12192,
-    )
-    text = response.choices[0].message.content.strip()
+    text = ""
+    max_retries = 4  # Maksimal coba ulang jika terkena limit API
+    
+    for attempt in range(max_retries):
+        try:
+            response = client.chat.completions.create(
+                model=MODEL_NAME, messages=[{"role": "user", "content": prompt}],
+                temperature=temperature, max_tokens=12192,
+            )
+            text = response.choices[0].message.content.strip()
+            break  # Jika sukses, keluar dari loop retry
+        except Exception as e:
+            # Menangkap error limit dan mencoba ulang setelah jeda aman
+            if "429" in str(e) or "Too Many Requests" in str(e):
+                if attempt < max_retries - 1:
+                    time.sleep(4)  # Istirahat 15 detik sebelum request lagi
+                    continue
+            raise e  # Jika bukan error 429 atau jatah retry habis, lemparkan error-nya
+
     st.session_state["raw_ai_output"] = text 
     
     text = text.replace("```json", "").replace("```", "").strip()
@@ -821,14 +835,14 @@ if submitted:
             step1_status.info("⏳ Tahap 1/3: Merancang Desain Pembelajaran (Identitas, CP, TP, & Pilar KBC)...")
             d1_context = call_ai(prompt_step_1(form))
             step1_status.success("✅ Tahap 1 Selesai!")
-            time.sleep(2) # Memberikan jeda (delay) agar API tidak mencapai batas rate-limit
+            time.sleep(5) # Delay diperbesar agar API aman dari rate-limit awal
             
             # Tahap 2
             step2_status = st.empty()
             step2_status.info("⏳ Tahap 2/3: Menyusun Pengalaman Belajar (Deep Learning) & Rincian Pertemuan...")
             d2_context = call_ai(prompt_step_2(form, d1_context))
             step2_status.success("✅ Tahap 2 Selesai!")
-            time.sleep(2)
+            time.sleep(5) # Delay diperbesar lagi
 
             # === 3. GENERATE DOKUMEN BERTAHAP (ANTREAN) ===
             st.markdown("### ⚙️ Pemrosesan Dokumen Antrean (Satu-per-Satu)")
@@ -878,7 +892,7 @@ if submitted:
                     st.session_state["hasil_generate"][filename] = doc_bytes
                     
                     doc_status.success(f"✅ Berhasil membuat dokumen: {tipe}")
-                    time.sleep(3) # Jeda ekstra 3 detik setiap kali selesai membuat 1 dokumen (mencegah error API).
+                    time.sleep(10) # Jeda diperbesar menjadi 10 detik setiap 1 dokumen berhasil agar antrean benar-benar lepas dari Limit
                     
                 except Exception as e:
                     doc_status.error(f"❌ Gagal memproses {tipe}: {e}")
