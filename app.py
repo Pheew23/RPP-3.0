@@ -1,9 +1,10 @@
 """
 Generator Dokumen Admin Guru MI (KBC & KMA 1503/2025)
 --------------------------------------------------------------------------------
-Pembaruan V4.4: 
-1. Fix Promes (Pemaksaan Distribusi Bulan agar tidak menumpuk).
-2. Perombakan Total LKPD agar 100% persis dengan struktur Interaktif (Ayo Berpikir).
+Pembaruan V4.5: 
+1. Perombakan Total PROMES: Format Hierarkis (Bab & Sub-Bab), Distribusi Angka JP, 
+   Jadwal PTS/PAS, dan Pemisahan Tabel Semester 1 & 2.
+2. LKPD Interaktif Original dipertahankan.
 """
 
 import io
@@ -47,7 +48,7 @@ JENJANG_FASE = {
     "Kelas 12 SMA/MA (Fase F)": "F",
 }
 
-st.set_page_config(page_title="MIFSAL ADMIN GURU V4.4", page_icon="📘", layout="wide")
+st.set_page_config(page_title="MIFSAL ADMIN GURU V4.5", page_icon="📘", layout="wide")
 
 @st.cache_resource
 def get_client():
@@ -141,7 +142,7 @@ Balas HANYA JSON:
 
 
 # ==============================================================================
-# PROMPT DOKUMEN LAIN (GLOBAL) - DIREVISI BAGIAN PROMES
+# PROMPT DOKUMEN LAIN (GLOBAL) - DIREVISI TOTAL BAGIAN PROMES
 # ==============================================================================
 def prompt_cp(form, aggregated_context):
     return f"""Buat Capaian Pembelajaran (CP) Mapel {form['mapel']} Fase/Kelas {form['kelas']}. KONTEN CP WAJIB MENGACU KMA 1503 TAHUN 2025. {aggregated_context}
@@ -157,20 +158,25 @@ Balas HANYA JSON: {{"rows": [{{"semester": "1", "no": "1", "materi": "str", "jp"
 
 def prompt_promes(form, aggregated_context):
     sem = form['semester']
-    if "1 & 2" in sem:
-        bulan = "Juli, Agustus, September, Oktober, November, Desember, Januari, Februari, Maret, April, Mei, Juni"
-        ket = "SATU TAHUN PENUH (12 Bulan)"
-    elif "1" in sem:
-        bulan = "Juli, Agustus, September, Oktober, November, Desember"
-        ket = "SEMESTER 1 (6 Bulan)"
-    else:
-        bulan = "Januari, Februari, Maret, April, Mei, Juni"
-        ket = "SEMESTER 2 (6 Bulan)"
-        
     return f"""Buat Program Semester Lengkap Mapel {form['mapel']} {form['kelas']}. 
-[ATURAN MUTLAK PROMES]: Distribusikan secara BERTAHAP dari awal bulan sampai akhir bulan di rentang waktu {ket} berikut: {bulan}. JANGAN MENUMPUKKAN SELURUH BAB HANYA PADA BULAN PERTAMA! Urutkan alur waktunya!
-{aggregated_context} 
-Balas HANYA JSON: {{"rows": [{{"materi_tp": "Bab 1...", "jp": "4", "bulan": "Juli", "minggu": [1, 2]}}, {{"materi_tp": "Bab 2...", "jp": "4", "bulan": "Agustus", "minggu": [3, 4]}}]}}"""
+[ATURAN MUTLAK PROMES]: Format harus persis seperti template hierarkis (Bab -> Sub-materi). Alokasikan JP dalam bentuk ANGKA pada minggu yang sesuai. Tambahkan Penilaian Tengah Semester (PTS) dan Penilaian Akhir Semester (PAS).
+Semester yang dipilih: {sem}. Jika "1 & 2 (Satu Tahun Penuh)", WAJIB buat 2 objek di array 'tables' (satu untuk Semester 1, satu untuk Semester 2).
+{aggregated_context}
+Balas HANYA JSON dengan struktur INI:
+{{
+  "tables": [
+    {{
+      "judul_semester": "SEMESTER 1 (GANJIL)",
+      "bulan": ["Juli", "Agustus", "September", "Oktober", "November", "Desember"],
+      "rows": [
+         {{"jenis": "bab", "materi": "Bab 1: Pecahan dan Desimal", "jp": "30", "distribusi": []}},
+         {{"jenis": "sub", "materi": "1.1 Perkalian Pecahan", "jp": "10", "distribusi": [{{"bulan": "Juli", "minggu": 1, "jp": "4"}}, {{"bulan": "Juli", "minggu": 2, "jp": "4"}}]}},
+         {{"jenis": "pts", "materi": "Penilaian Tengah Semester (PTS)", "jp": "2", "distribusi": [{{"bulan": "September", "minggu": 2, "jp": "2"}}]}},
+         {{"jenis": "pas", "materi": "Penilaian Akhir Semester (PAS)", "jp": "4", "distribusi": [{{"bulan": "Desember", "minggu": 2, "jp": "4"}}]}}
+      ]
+    }}
+  ]
+}}"""
 
 def prompt_kktp(form, aggregated_context):
     return f"""Buat KKTP Mapel {form['mapel']} {form['kelas']} untuk SEMUA BAB.{aggregated_context}
@@ -402,13 +408,9 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
     buf = io.BytesIO(); doc.save(buf); buf.seek(0)
     return buf.getvalue()
 
-# ==============================================================================
-# FUNGSI BUILDER LKPD (PEROMBAKAN TOTAL SESUAI CONTOH)
-# ==============================================================================
 def build_lkpd_per_bab(form, bab_name, d3_data):
     doc = create_base_doc(landscape=False)
     
-    # Header LKPD Format Formal
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     r = p.add_run("LEMBAR KERJA PESERTA DIDIK (LKPD)\n")
@@ -426,47 +428,38 @@ def build_lkpd_per_bab(form, bab_name, d3_data):
     for item in lkpd_list:
         if not isinstance(item, dict): continue
         
-        # 1. Judul Topik
         topik_judul = str(item.get("topik_judul", f"Topik: {item.get('topik', 'Aktivitas Belajar')}"))
         doc.add_heading(topik_judul, level=2)
         
-        # 2. Tujuan Pembelajaran
         if item.get("tujuan_pembelajaran"):
             doc.add_heading("Tujuan Pembelajaran:", level=3)
             for tp in safe_list(item.get("tujuan_pembelajaran")): doc.add_paragraph(tp, style='List Bullet')
             doc.add_paragraph()
             
-        # 3. Looping Aktivitas (Aktivitas 1, Aktivitas 2, dst)
         aktivitas_list = safe_list(item.get("aktivitas", []))
         for act in aktivitas_list:
             if not isinstance(act, dict): continue
             
-            # Judul Aktivitas
             judul_act = act.get("judul_aktivitas", "Aktivitas")
             doc.add_heading(judul_act, level=3)
             
-            # Pengantar Konteks Cerita
             if act.get("konteks"):
                 doc.add_paragraph(str(act.get("konteks")))
             
-            # Ayo Menggambar dan Berpikir
             if act.get("ayo_berpikir"):
                 doc.add_heading("Ayo Menggambar dan Berpikir!", level=4)
                 for ab in safe_list(act.get("ayo_berpikir")): doc.add_paragraph(ab, style='List Bullet')
                 
-            # Menghubungkan ke Kalimat Matematika / Logika
             if act.get("koneksi_matematika"):
                 doc.add_heading("Menghubungkan ke Kalimat Matematika:", level=4)
                 for kc in safe_list(act.get("koneksi_matematika")): doc.add_paragraph(kc, style='List Bullet')
                 
-            # Kesimpulanmu
             if act.get("kesimpulan"):
                 p_kes = doc.add_paragraph()
                 p_kes.add_run("Kesimpulanmu: ").bold = True
                 p_kes.add_run(str(act.get("kesimpulan")))
                 doc.add_paragraph("\n") 
                 
-            # Latihan Berpikir Khusus Aktivitas
             if act.get("latihan_berpikir"):
                 p_lat = doc.add_paragraph()
                 p_lat.add_run("Latihan Berpikir:\n").bold = True
@@ -545,40 +538,75 @@ def build_prota(form, ai_data):
 def build_promes(form, ai_data):
     doc = create_base_doc(landscape=True)
     create_header(doc, "PROGRAM SEMESTER (PROSEM)", form)
-    sem = form['semester']
-    if "1 & 2" in sem: bulan = ["Juli", "Agustus", "September", "Oktober", "November", "Desember", "Januari", "Februari", "Maret", "April", "Mei", "Juni"]
-    elif "1" in sem: bulan = ["Juli", "Agustus", "September", "Oktober", "November", "Desember"]
-    else: bulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni"]
-        
-    total_cols = 2 + (len(bulan) * 5)
-    table = doc.add_table(rows=2, cols=total_cols); table.style = 'Table Grid'
-    table.cell(0, 0).merge(table.cell(1, 0)); style_cell(table.cell(0, 0), "Materi / Tujuan Pembelajaran", bold=True, center=True)
-    table.cell(0, 1).merge(table.cell(1, 1)); style_cell(table.cell(0, 1), "JP", bold=True, center=True)
-    set_cell_background(table.cell(0, 0), "EFEFEF"); set_cell_background(table.cell(0, 1), "EFEFEF")
-    table.columns[0].width = Cm(6.0); table.columns[1].width = Cm(1.5)
     
-    col_idx = 2
-    for b in bulan:
-        table.cell(0, col_idx).merge(table.cell(0, col_idx + 4)); style_cell(table.cell(0, col_idx), b, bold=True, center=True)
-        set_cell_background(table.cell(0, col_idx), "EFEFEF")
-        for w in range(5):
-            style_cell(table.cell(1, col_idx + w), str(w + 1), bold=True, center=True)
-            set_cell_background(table.cell(1, col_idx + w), "F5F5F5")
-            table.columns[col_idx + w].width = Cm(0.5)
-        col_idx += 5
+    tables_data = safe_list(ai_data.get("tables", []))
+    
+    for t_data in tables_data:
+        if not isinstance(t_data, dict): continue
         
-    row_m = table.add_row().cells
-    style_cell(row_m[0], "Minggu ke-", bold=True, italic=True)
-    for row in safe_list(ai_data.get("rows"), []):
-        if not isinstance(row, dict): continue
-        r = table.add_row().cells
-        style_cell(r[0], row.get("materi_tp", "")); style_cell(r[1], row.get("jp", ""), center=True)
-        target_bulan = row.get("bulan", ""); minggu_aktif = safe_list(row.get("minggu", []))
-        idx = 2
-        for b in bulan:
-            for w in range(1, 6):
-                if target_bulan.lower() == b.lower() and w in minggu_aktif: set_cell_background(r[idx], COLOR_TITLE) 
-                idx += 1
+        judul_sem = t_data.get("judul_semester", "SEMESTER")
+        doc.add_heading(judul_sem, level=2)
+        
+        bulan_list = safe_list(t_data.get("bulan", []))
+        if not bulan_list: continue
+        
+        total_cols = 2 + (len(bulan_list) * 5)
+        table = doc.add_table(rows=2, cols=total_cols)
+        table.style = 'Table Grid'
+        
+        # Header Row
+        table.cell(0, 0).merge(table.cell(1, 0))
+        style_cell(table.cell(0, 0), "Materi / Tujuan Pembelajaran", bold=True, center=True)
+        table.cell(0, 1).merge(table.cell(1, 1))
+        style_cell(table.cell(0, 1), "JP", bold=True, center=True)
+        table.columns[0].width = Cm(6.0)
+        table.columns[1].width = Cm(1.5)
+        
+        col_idx = 2
+        for b in bulan_list:
+            table.cell(0, col_idx).merge(table.cell(0, col_idx + 4))
+            style_cell(table.cell(0, col_idx), b, bold=True, center=True)
+            set_cell_background(table.cell(0, col_idx), "EFEFEF")
+            for w in range(5):
+                style_cell(table.cell(1, col_idx + w), str(w + 1), bold=True, center=True)
+                set_cell_background(table.cell(1, col_idx + w), "F5F5F5")
+                table.columns[col_idx + w].width = Cm(0.6)
+            col_idx += 5
+            
+        # Isian Tabel (Hierarkis)
+        for row in safe_list(t_data.get("rows", [])):
+            if not isinstance(row, dict): continue
+            r = table.add_row().cells
+            jenis = row.get("jenis", "sub")
+            materi = row.get("materi", "")
+            jp = str(row.get("jp", ""))
+            
+            is_bab = (jenis == "bab")
+            
+            style_cell(r[0], materi, bold=is_bab)
+            style_cell(r[1], jp, bold=is_bab, center=True)
+            
+            if is_bab:
+                set_cell_background(r[0], "DEEAF1")
+                set_cell_background(r[1], "DEEAF1")
+                
+            distribusi = safe_list(row.get("distribusi", []))
+            for dist in distribusi:
+                if not isinstance(dist, dict): continue
+                d_bulan = dist.get("bulan", "")
+                d_minggu = int(dist.get("minggu", 1))
+                d_jp = str(dist.get("jp", ""))
+                
+                try:
+                    b_idx = bulan_list.index(d_bulan)
+                    c_idx = 2 + (b_idx * 5) + (d_minggu - 1)
+                    if 2 <= c_idx < total_cols:
+                        style_cell(r[c_idx], d_jp, center=True)
+                except ValueError:
+                    pass
+                    
+        doc.add_paragraph()
+        
     add_signatures(doc, form, full_width=True)
     buf = io.BytesIO(); doc.save(buf); buf.seek(0)
     return buf.getvalue()
@@ -616,8 +644,8 @@ def build_jurnal(form, ai_data):
 # ==============================================================================
 # UI STREAMLIT 
 # ==============================================================================
-st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4.4 ")
-st.markdown("*Berbasis Model Lagos AI 9.1 - Fix Promes Distribusi Bulanan & LKPD Interaktif Original*")
+st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4.5 ")
+st.markdown("*Berbasis Model Lagos AI 9.1 - Fix Promes Format Hierarkis (JP Distribusi Angka) & LKPD Interaktif Original*")
 
 with st.form("form_modul"):
     col1, col2 = st.columns(2)
