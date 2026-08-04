@@ -1,10 +1,10 @@
 """
 Generator Dokumen Admin Guru MI (KBC & KMA 1503/2025)
 --------------------------------------------------------------------------------
-Pembaruan V4.18 (The Bulletproof Edition): 
-1. Mengembalikan Aturan Anti-Kutip Ganda agar JSON tidak crash.
-2. Menurunkan Batch Size ke 2 (Super Aman dari terpotong).
-3. Menambahkan Auto-Repair JSON (Jika kurang kurung tutup, sistem akan menambalnya, BUKAN membuangnya).
+Pembaruan V4.21 (The Final Fix - Full Content Edition): 
+1. PERBAIKAN FATAL: Menghapus larangan kutip ganda yang menyebabkan JSON Invalid. 
+   Sekarang AI menggunakan kutip ganda untuk struktur JSON, dan kutip tunggal untuk isi teks.
+2. Mempertahankan Smart Pacing (Batch 3 & Delay) untuk mencegah Error 429.
 """
 
 import io
@@ -41,7 +41,7 @@ JENJANG_FASE = {
     "Kelas 12 SMA/MA (Fase F)": "F",
 }
 
-st.set_page_config(page_title="MIFSAL ADMIN GURU V4.18", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="MIFSAL ADMIN GURU V4.21", page_icon="✅", layout="wide")
 
 @st.cache_resource
 def get_client():
@@ -51,13 +51,13 @@ def get_client():
         st.stop()
     return OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key)
 
-# FUNGSI call_ai SUPER KEBAL (DENGAN AUTO-REPAIR JSON)
+# FUNGSI call_ai DIPERBAIKI (JSON VALID)
 def call_ai(prompt: str, temperature=0.7) -> dict:
     client = get_client()
-    max_retries = 4
+    max_retries = 6 
     
-    # Injeksi aturan anti-crash ke semua prompt secara otomatis
-    safe_prompt = prompt + "\n\n[ATURAN FORMAT MUTLAK]: DILARANG KERAS menggunakan tanda kutip ganda (\") di dalam teks/nilai string. Jika butuh, gunakan kutip tunggal ('). Balas HANYA dengan JSON valid."
+    # ATURAN YANG BENAR AGAR JSON TIDAK KOSONG
+    safe_prompt = prompt + "\n\n[ATURAN JSON MUTLAK]: Kamu WAJIB membalas dengan format JSON murni. Gunakan tanda kutip ganda (\") untuk key dan value JSON. TAPI, jika kamu butuh tanda kutip di DALAM isi teks/kalimat, gunakan tanda kutip tunggal (') agar tidak merusak struktur JSON."
     
     for attempt in range(max_retries):
         try:
@@ -68,7 +68,7 @@ def call_ai(prompt: str, temperature=0.7) -> dict:
             raw_content = response.choices[0].message.content
             if raw_content is None:
                 if attempt < max_retries - 1:
-                    time.sleep(5)
+                    time.sleep(8)
                     continue
                 else: return {}
                 
@@ -78,14 +78,12 @@ def call_ai(prompt: str, temperature=0.7) -> dict:
             start = text.find('{')
             end = text.rfind('}')
             if start != -1: 
-                # Jika tidak menemukan kurung tutup, ambil sampai akhir
                 text = text[start:end+1] if end != -1 else text[start:]
                 
             text = text.replace('\n', ' ').replace('\r', '')
             text = re.sub(r'[\x00-\x1f]', '', text)
-            text = re.sub(r',\s*([}\]])', r'\1', text) # Hapus koma gantung
+            text = re.sub(r',\s*([}\]])', r'\1', text) 
             
-            # --- AUTO-REPAIR JSON (Menambal Kurung yang Terpotong) ---
             kurung_kurawal_buka = text.count('{')
             kurung_kurawal_tutup = text.count('}')
             kurung_siku_buka = text.count('[')
@@ -109,8 +107,9 @@ def call_ai(prompt: str, temperature=0.7) -> dict:
             
         except Exception as e:
             if "429" in str(e) or "Too Many Requests" in str(e):
+                print(f"Terkena 429 Too Many Requests (Attempt {attempt+1}). Tidur 25 detik...")
                 if attempt < max_retries - 1:
-                    time.sleep(15)
+                    time.sleep(25) 
                     continue
             raise e
     return {}
@@ -135,7 +134,7 @@ def get_aggregated_sinkronisasi_context(all_chapters_data):
         return f"\n\n[SANGAT PENTING - MASTER SINKRONISASI DOKUMEN]\nKamu WAJIB mematuhi data dari seluruh Bab berikut agar semua dokumen selaras:\n{sinkron_text}\nRangkum dan susun secara logis."
     return ""
 
-def create_batches(total_items, batch_size=2):
+def create_batches(total_items, batch_size=3):
     return [list(range(i, min(i + batch_size, total_items + 1))) for i in range(1, total_items + 1, batch_size)]
 
 # ==============================================================================
@@ -166,7 +165,6 @@ Sediakan 5 Soal PG Remedial lengkap dengan kunci, Pengayaan, Glosarium, dan Daft
 Balas HANYA JSON:
 {{"remedial_pg": [{{"soal": "Pertanyaan PG?", "a": "Opsi A", "b": "Opsi B", "c": "Opsi C", "d": "Opsi D", "kunci": "a"}}], "pengayaan": ["Tugas 1", "Tugas 2"], "glosarium": [{{"istilah": "str", "definisi": "str"}}], "daftar_pustaka": ["Referensi nyata 1", "Referensi nyata 2"]}}"""
 
-
 # ==============================================================================
 # PROMPT KHUSUS LKPD 
 # ==============================================================================
@@ -175,7 +173,6 @@ def prompt_lkpd_interaktif_batch(form, bab_name, batch_list):
 Pastikan membuat LKPD terpisah untuk setiap pertemuan di dalam array.
 Balas HANYA JSON:
 {{"lkpd": [{{"pertemuan": {batch_list[0]}, "topik_judul": "Topik Pertemuan {batch_list[0]}: [Sub-Bab]", "tujuan_pembelajaran": ["Memahami..."], "aktivitas": [{{"judul_aktivitas": "Aktivitas 1: Kisah/Konteks", "konteks": "Bayangkan kamu sedang...", "ayo_berpikir": ["Langkah 1..."], "koneksi_matematika": ["Kalimat/Konsep..."], "kesimpulan": "Artinya adalah...", "latihan_berpikir": "Kasus untuk siswa..."}}]}}]}}"""
-
 
 # ==============================================================================
 # PROMPT DOKUMEN LAIN (GLOBAL)
@@ -666,8 +663,8 @@ def build_lkpd_per_bab(form, bab_name, d5_lkpd_data):
 # ==============================================================================
 # UI STREAMLIT 
 # ==============================================================================
-st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4.18 ")
-st.markdown("*Berbasis Model Lagos AI 9.1 - Bulletproof Edition (Anti-Kosong)*")
+st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4.21 ")
+st.markdown("*Berbasis Model Lagos AI 9.1 - The Final Fix (Full Content & Anti-Crash)*")
 
 with st.form("form_modul"):
     col1, col2 = st.columns(2)
@@ -745,22 +742,21 @@ if submitted:
                 
                 st.write(f"🔄 **Sedang memproses {bab_name} ({jml_pert} Pertemuan)...**")
                 
-                st.info("Tahap 1: Desain Pembelajaran Modul..."); d1_ctx = call_ai(prompt_step_1(form, bab_name)); time.sleep(3)
+                st.info("Tahap 1: Desain Pembelajaran Modul..."); d1_ctx = call_ai(prompt_step_1(form, bab_name)); time.sleep(8)
                 
                 d2_pertemuan_list = []
-                # KEMBALI KE BATCH SIZE 2 AGAR SANGAT AMAN
-                batches = create_batches(jml_pert, 2) 
+                batches = create_batches(jml_pert, 3) 
                 
                 for batch in batches:
                     st.info(f"Tahap 2: Pengalaman Belajar Modul (Memproses Pertemuan {batch})...")
                     p_resp = call_ai(prompt_step_2_batch(form, bab_name, batch))
                     raw_p = p_resp.get("pertemuan", [])
                     if isinstance(raw_p, list): d2_pertemuan_list.extend(raw_p)
-                    time.sleep(3)
+                    time.sleep(10) 
                 d2_ctx = {"pertemuan": d2_pertemuan_list}
 
-                st.info("Tahap 3: Asesmen, Rubrik & Materi Ajar..."); d3_ctx = call_ai(prompt_step_3(form, bab_name, jml_pert, d2_ctx)); time.sleep(3)
-                st.info("Tahap 4: Remedial, Glosarium & Lampiran Akhir..."); d4_ctx = call_ai(prompt_step_4(form, bab_name, jml_pert)); time.sleep(3)
+                st.info("Tahap 3: Asesmen, Rubrik & Materi Ajar..."); d3_ctx = call_ai(prompt_step_3(form, bab_name, jml_pert, d2_ctx)); time.sleep(8)
+                st.info("Tahap 4: Remedial, Glosarium & Lampiran Akhir..."); d4_ctx = call_ai(prompt_step_4(form, bab_name, jml_pert)); time.sleep(8)
                 
                 chapter_data = {"bab": bab_name, "jml_pert": jml_pert, "d1": d1_ctx, "d2": d2_ctx, "d3": d3_ctx, "d4": d4_ctx}
                 all_chapters_data.append(chapter_data)
@@ -776,13 +772,13 @@ if submitted:
                         lkpd_resp = call_ai(prompt_lkpd_interaktif_batch(form, bab_name, batch))
                         raw_lkpd = lkpd_resp.get("lkpd", [])
                         if isinstance(raw_lkpd, list): combined_lkpd_list.extend(raw_lkpd)
-                        time.sleep(3)
+                        time.sleep(10) 
                         
                     d5_combined_ctx = {"lkpd": combined_lkpd_list}
                     st.session_state["hasil_generate"][f"LKPD_Siswa_{safe_mapel}_Bab_{idx+1}_{safe_bab}.docx"] = build_lkpd_per_bab(form, bab_name, d5_combined_ctx)
                     st.success(f"✅ Berhasil membuat LKPD Interaktif: {bab_name}")
                 
-                time.sleep(5) 
+                time.sleep(10) 
             
             master_context = get_aggregated_sinkronisasi_context(all_chapters_data)
             st.markdown("### ⚙️ Pemrosesan Dokumen Administrasi Global (Sinkronisasi)")
@@ -804,7 +800,7 @@ if submitted:
                             st.info(f"Generate KKTP: {bab_nm}...")
                             kktp_resp = call_ai(prompt_kktp_per_bab(form, bab_nm, tp_list))
                             kktp_combined_rows.extend(safe_list(kktp_resp.get("rows", [])))
-                            time.sleep(3)
+                            time.sleep(8)
                         doc_bytes = build_kktp(form, {"rows": kktp_combined_rows})
                         
                     else:
@@ -816,7 +812,7 @@ if submitted:
                     
                     st.session_state["hasil_generate"][f"{tipe.replace(' & ', '_').replace(' ', '_').replace('(', '').replace(')', '')}_{safe_mapel}_Sinkronisasi.docx"] = doc_bytes
                     doc_status.success(f"✅ Berhasil membuat & mensinkronkan: {tipe}")
-                    time.sleep(8) 
+                    time.sleep(10) 
                 except Exception as e: doc_status.error(f"❌ Gagal memproses {tipe}: {e}")
             
             st.success("🎉 Selesai! Seluruh Ekosistem Dokumen Administrasi Anda Berhasil Dibuat.")
