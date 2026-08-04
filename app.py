@@ -1,9 +1,10 @@
 """
 Generator Dokumen Admin Guru MI (KBC & KMA 1503/2025)
 --------------------------------------------------------------------------------
-Pembaruan V4.16 (Fast Batching Edition): 
-Implementasi "Batching" -> Memproses 3 Pertemuan sekaligus dalam 1 kali eksekusi AI 
-untuk mempercepat waktu loading secara drastis tanpa mengorbankan kualitas dan menghindari teks terpotong.
+Pembaruan V4.17 (Auto-Reject Edition): 
+Perbaikan fungsi call_ai dengan memindahkan validasi JSON ke DALAM loop. 
+Jika JSON terpotong/rusak, sistem akan otomatis me-reject dan memaksa AI mengulang 
+sehingga mencegah hasil dokumen CP, Promes, KKTP, dan Jurnal menjadi kosong.
 """
 
 import io
@@ -47,7 +48,7 @@ JENJANG_FASE = {
     "Kelas 12 SMA/MA (Fase F)": "F",
 }
 
-st.set_page_config(page_title="MIFSAL ADMIN GURU V4.16", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="MIFSAL ADMIN GURU V4.17", page_icon="🛡️", layout="wide")
 
 @st.cache_resource
 def get_client():
@@ -57,9 +58,9 @@ def get_client():
         st.stop()
     return OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key)
 
+# FUNGSI call_ai TELAH DIPERKUAT (AUTO-REJECT JIKA JSON RUSAK)
 def call_ai(prompt: str, temperature=0.7) -> dict:
     client = get_client()
-    text = ""
     max_retries = 4
     
     for attempt in range(max_retries):
@@ -73,35 +74,45 @@ def call_ai(prompt: str, temperature=0.7) -> dict:
                 if attempt < max_retries - 1:
                     time.sleep(5)
                     continue
-                else: text = "" 
-            else:
-                text = raw_content.strip()
-                break
+                else: return {}
+                
+            text = raw_content.strip()
+            text = text.replace("```json", "").replace("```", "").strip()
+            start = text.find('{')
+            end = text.rfind('}')
+            if start != -1 and end != -1: 
+                text = text[start:end+1]
+                
+            text = text.replace('\n', ' ').replace('\r', '')
+            text = re.sub(r'[\x00-\x1f]', '', text)
+            text = re.sub(r',\s*([}\]])', r'\1', text)
+            
+            # VALIDASI JSON DI DALAM LOOP. Jika gagal, paksa AI mengulang!
+            parsed_json = json.loads(text)
+            st.session_state["raw_ai_output"] = text 
+            return parsed_json # Keluar jika sukses
+            
+        except json.JSONDecodeError as e:
+            # Jika JSON cacat/terpotong, ulang prosesnya
+            print(f"JSON Cacat (Attempt {attempt+1}): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(5)
+                continue
+            return {} # Gagal setelah 4 kali coba
+            
         except Exception as e:
             if "429" in str(e) or "Too Many Requests" in str(e):
                 if attempt < max_retries - 1:
                     time.sleep(15)
                     continue
             raise e
-
-    st.session_state["raw_ai_output"] = text 
-    text = text.replace("```json", "").replace("```", "").strip()
-    start = text.find('{')
-    end = text.rfind('}')
-    if start != -1 and end != -1: text = text[start:end+1]
-        
-    text = text.replace('\n', ' ').replace('\r', '')
-    text = re.sub(r'[\x00-\x1f]', '', text)
-    text = re.sub(r',\s*([}\]])', r'\1', text)
-    
-    try: return json.loads(text)
-    except json.JSONDecodeError as e: return {}
+    return {}
 
 def get_aggregated_sinkronisasi_context(all_chapters_data):
     sinkron_text = ""
     for idx, chap in enumerate(all_chapters_data):
         bab_name = chap["bab"]
-        d1 = chap["d1"]; d2 = chap["d2"]
+        d1 = chap.get("d1", {}); d2 = chap.get("d2", {})
         sinkron_text += f"\n--- INFORMASI BAB {idx+1}: {bab_name} ---\n"
         if d1 and "desain" in d1:
             cp = d1["desain"].get("capaian_pembelajaran", "")
@@ -114,15 +125,14 @@ def get_aggregated_sinkronisasi_context(all_chapters_data):
             sinkron_text += f"Rincian Materi & Sub-Bab: {materi_str}\n"
 
     if sinkron_text:
-        return f"\n\n[SANGAT PENTING - MASTER SINKRONISASI DOKUMEN]\nKamu WAJIB mematuhi data dari seluruh Bab berikut agar semua dokumen selaras:\n{sinkron_text}\nRangkum dan susun secara logis sesuai Sub-Bab yang tercantum."
+        return f"\n\n[SANGAT PENTING - MASTER SINKRONISASI DOKUMEN]\nKamu WAJIB mematuhi data dari seluruh Bab berikut agar semua dokumen selaras:\n{sinkron_text}\nRangkum dan susun secara logis."
     return ""
 
 def create_batches(total_items, batch_size=3):
-    """Membagi total pertemuan ke dalam grup (batch) berukuran maksimal 3."""
     return [list(range(i, min(i + batch_size, total_items + 1))) for i in range(1, total_items + 1, batch_size)]
 
 # ==============================================================================
-# PROMPT MODUL AJAR (DIPISAH & BATCHING)
+# PROMPT MODUL AJAR 
 # ==============================================================================
 def prompt_step_1(form, bab_name):
     return f"""Kamu pakar Kurikulum Merdeka Pendekatan Deep Learning Berbasis Cinta (KBC). 
@@ -139,7 +149,7 @@ Balas HANYA JSON dengan struktur list objek:
 
 def prompt_step_3(form, bab_name, jumlah_pertemuan, step2_data):
     return f"""Tahap 3 modul {form['mapel']} bab {bab_name}. 
-Sediakan Asesmen Awal, Formatif, Sumatif (HOTS), Rubrik Pengetahuan, dan Materi Ajar (Ringkasan Sesi per Sesi).
+Sediakan Asesmen Awal, Formatif, Sumatif (HOTS), Rubrik Pengetahuan, dan Materi Ajar.
 Balas HANYA JSON:
 {{"penilaian": {{"awal": ["str"], "formatif_as": ["str"], "formatif_for": ["str"], "sumatif": ["str"]}}, "asesmen_awal_lisan": ["Soal 1", "Soal 2"], "rubrik_pengetahuan": [{{"aspek": "Aspek 1", "skor_4": "str", "skor_3": "str", "skor_2": "str", "skor_1": "str"}}], "sumatif_hots": ["Soal HOTS 1", "Soal HOTS 2", "Soal HOTS 3", "Soal HOTS 4", "Soal HOTS 5"], "materi_ajar": [{{"sesi": "SESI 1: Nama Sub-Bab", "tujuan": "str", "pengantar": "str", "konsep_utama": "str", "contoh": "str"}}]}}"""
 
@@ -151,7 +161,7 @@ Balas HANYA JSON:
 
 
 # ==============================================================================
-# PROMPT KHUSUS LKPD (BATCHING)
+# PROMPT KHUSUS LKPD 
 # ==============================================================================
 def prompt_lkpd_interaktif_batch(form, bab_name, batch_list):
     return f"""Buat LKPD Interaktif untuk Mapel {form['mapel']} {form['kelas']} Topik {bab_name}, KHUSUS UNTUK PERTEMUAN KE-{batch_list}.
@@ -167,10 +177,10 @@ def prompt_cp(form, aggregated_context):
     return f"""Buat Capaian Pembelajaran (CP) Mapel {form['mapel']} Fase/Kelas {form['kelas']}. KONTEN CP WAJIB MENGACU KMA 1503 TAHUN 2025. {aggregated_context}\nBalas HANYA JSON: {{"rasional": "str 1 paragraf", "tujuan": ["str"], "elemen": [{{"nama": "str", "deskripsi": "str"}}], "cp_paragraf": "str 1 paragraf", "cp_tabel": [{{"elemen": "str", "capaian": "str"}}]}}"""
 
 def prompt_atp(form, aggregated_context):
-    return f"""Buat Alur Tujuan Pembelajaran (ATP) Mapel {form['mapel']} {form['kelas']}. WAJIB MENGACU KMA 1503 TAHUN 2025. {aggregated_context}\nBalas HANYA JSON: {{"cp_fase": "str", "rows": [{{"no": "1", "elemen": "str", "tp": "str", "atp": "str", "materi": "str", "jp": "str"}}]}}"""
+    return f"""Buat Alur Tujuan Pembelajaran (ATP) Lengkap Mapel {form['mapel']} {form['kelas']}. WAJIB MENGACU KMA 1503 TAHUN 2025. {aggregated_context}\nBalas HANYA JSON: {{"cp_fase": "str", "rows": [{{"no": "1", "elemen": "str", "tp": "str", "atp": "str", "materi": "str", "jp": "str"}}]}}"""
 
 def prompt_prota(form, aggregated_context):
-    return f"""Buat Program Tahunan (PROTA) Mapel {form['mapel']} {form['kelas']}. Tuliskan nama Bab beserta Sub-babnya dari referensi berikut. {aggregated_context}\nBalas HANYA JSON: {{"rows": [{{"semester": "1", "no": "1", "materi": "Bab 1... (Sub-Bab...)", "jp": "str", "keterangan": "str"}}]}}"""
+    return f"""Buat Program Tahunan (PROTA) Mapel {form['mapel']} {form['kelas']}. Tuliskan nama Bab beserta Sub-babnya. {aggregated_context}\nBalas HANYA JSON: {{"rows": [{{"semester": "1", "no": "1", "materi": "Bab 1... (Sub-Bab...)", "jp": "str", "keterangan": "str"}}]}}"""
 
 def prompt_promes(form, aggregated_context):
     sem = form['semester']
@@ -182,6 +192,7 @@ def prompt_promes(form, aggregated_context):
 def prompt_kktp_per_bab(form, bab_name, tp_list):
     return f"""Buat KKTP Mapel {form['mapel']} {form['kelas']}. KHUSUS BAB INI: {bab_name}. Tujuan Pembelajaran: {tp_list}\nBuat tabel indikator lengkap. Balas HANYA JSON: {{"rows": [{{"tp": "str", "kriteria": "str"}}]}}"""
 
+# DIPERKUAT: TAHAN BANTING JIKA AI GAGAL GENERATE
 def generate_jurnal_otomatis(form, all_chapters_data):
     jurnal_rows = []
     pertemuan_global = 1
@@ -191,8 +202,19 @@ def generate_jurnal_otomatis(form, all_chapters_data):
         for p in pertemuan_list:
             if not isinstance(p, dict): continue
             topik_materi = p.get("materi", bab_name) 
-            akt = p.get("inti_mengaplikasikan", {}).get("aktivitas", ["Pembelajaran KBC"])
-            jurnal_rows.append({"pertemuan": str(pertemuan_global), "topik": topik_materi, "aktivitas": str(akt[0]) if isinstance(akt, list) and len(akt) > 0 else str(akt), "asesmen": "Formatif/Lisan/Penugasan"})
+            
+            # Cek berbagai struktur yang mungkin dihalusinasikan AI
+            akt_utama = "Kegiatan Pembelajaran (KBC)"
+            if "inti_mengaplikasikan" in p and "aktivitas" in p["inti_mengaplikasikan"]:
+                akt = p["inti_mengaplikasikan"]["aktivitas"]
+                if isinstance(akt, list) and len(akt) > 0: akt_utama = str(akt[0])
+                else: akt_utama = str(akt)
+            elif "aktivitas" in p:
+                akt = p["aktivitas"]
+                if isinstance(akt, list) and len(akt) > 0: akt_utama = str(akt[0])
+                else: akt_utama = str(akt)
+                
+            jurnal_rows.append({"pertemuan": str(pertemuan_global), "topik": topik_materi, "aktivitas": akt_utama, "asesmen": "Formatif/Lisan/Penugasan"})
             pertemuan_global += 1
     return {"rows": jurnal_rows}
 
@@ -429,8 +451,7 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
         style_cell(row[1], v1)
         if k2 == "": row[1].merge(row[3])
         else:
-            style_cell(row[2], k2, bold=True); set_cell_background(row[2], "D6EAF8")
-            style_cell(row[3], v2)
+            style_cell(row[2], k2, bold=True); set_cell_background(row[2], "D6EAF8"); style_cell(row[3], v2)
     doc.add_paragraph()
 
     doc.add_paragraph("A. IDENTIFIKASI PESERTA DIDIK").bold = True
@@ -561,8 +582,7 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
         t_mat.columns[0].width = Cm(4.0); t_mat.columns[1].width = Cm(14.0)
         for k, v in [("Pengantar", mat.get("pengantar")), ("Konsep Utama", mat.get("konsep_utama")), ("Contoh Kontekstual", mat.get("contoh"))]:
             r = t_mat.add_row().cells
-            style_cell(r[0], k, bold=True); set_cell_background(r[0], "FADBD8")
-            r[1].text = str(v)
+            style_cell(r[0], k, bold=True); set_cell_background(r[0], "FADBD8"); r[1].text = str(v)
         doc.add_paragraph()
 
     doc.add_paragraph("LAMPIRAN V – TINDAK LANJUT DAN REFLEKSI").bold = True
@@ -573,8 +593,7 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
     for i, pg in enumerate(safe_list(d4.get("remedial_pg", [])), 1):
         if not isinstance(pg, dict): continue
         doc.add_paragraph(f"{i}. {pg.get('soal', '')}")
-        doc.add_paragraph(f"   a. {pg.get('a', '')}\n   b. {pg.get('b', '')}\n   c. {pg.get('c', '')}\n   d. {pg.get('d', '')}")
-        doc.add_paragraph(f"   → Jawaban: {pg.get('kunci', '')}")
+        doc.add_paragraph(f"   a. {pg.get('a', '')}\n   b. {pg.get('b', '')}\n   c. {pg.get('c', '')}\n   d. {pg.get('d', '')}\n   → Jawaban: {pg.get('kunci', '')}")
     doc.add_paragraph()
     
     doc.add_paragraph("B. PROGRAM PENGAYAAN").bold = True
@@ -599,32 +618,22 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
     style_cell(t_glo.cell(0,1), "DEFINISI", bold=True, center=True); set_cell_background(t_glo.cell(0,1), "E8DAEF")
     for glo in safe_list(d4.get("glosarium", [])):
         if not isinstance(glo, dict): continue
-        r = t_glo.add_row().cells
-        style_cell(r[0], glo.get("istilah", ""), bold=True)
-        r[1].text = glo.get("definisi", "")
+        r = t_glo.add_row().cells; style_cell(r[0], glo.get("istilah", ""), bold=True); r[1].text = glo.get("definisi", "")
     doc.add_paragraph()
 
     doc.add_paragraph("DAFTAR PUSTAKA").bold = True
     for i, dp in enumerate(safe_list(d4.get("daftar_pustaka", [])), 1): doc.add_paragraph(f"{i}. {dp}")
 
     add_signatures(doc, form, full_width=True)
-    buf = io.BytesIO(); doc.save(buf); buf.seek(0)
-    return buf.getvalue()
+    buf = io.BytesIO(); doc.save(buf); buf.seek(0); return buf.getvalue()
 
 
 def build_lkpd_per_bab(form, bab_name, d5_lkpd_data):
     doc = create_base_doc(landscape=False)
-    
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = p.add_run("LEMBAR KERJA PESERTA DIDIK (LKPD)\n")
-    r.bold = True; r.font.size = Pt(14)
+    p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = p.add_run("LEMBAR KERJA PESERTA DIDIK (LKPD)\n"); r.bold = True; r.font.size = Pt(14)
     p.add_run(f"{form['mapel']} Kelas {form['kelas']} - {bab_name}")
-    
-    doc.add_paragraph("Nama\t\t: __________________________")
-    doc.add_paragraph("Kelas\t\t: __________________________")
-    doc.add_paragraph("Tanggal\t: __________________________")
-    doc.add_paragraph()
+    doc.add_paragraph("Nama\t\t: __________________________\nKelas\t\t: __________________________\nTanggal\t: __________________________\n")
     
     for item in safe_list(d5_lkpd_data.get("lkpd", [])):
         if not isinstance(item, dict): continue
@@ -649,14 +658,13 @@ def build_lkpd_per_bab(form, bab_name, d5_lkpd_data):
             if act.get("latihan_berpikir"):
                 p_lat = doc.add_paragraph(); p_lat.add_run("Latihan Berpikir:\n").bold = True; p_lat.add_run(str(act.get("latihan_berpikir"))); doc.add_paragraph("\n\n") 
         doc.add_page_break()
-    buf = io.BytesIO(); doc.save(buf); buf.seek(0)
-    return buf.getvalue()
+    buf = io.BytesIO(); doc.save(buf); buf.seek(0); return buf.getvalue()
 
 # ==============================================================================
 # UI STREAMLIT 
 # ==============================================================================
-st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4.16 ")
-st.markdown("*Berbasis Model Lagos AI 9.1 - Fast Batching Edition (3 Pertemuan/Loop)*")
+st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4.17 ")
+st.markdown("*Berbasis Model Lagos AI 9.1 - Auto-Reject System (Fix Blank Documents)*")
 
 with st.form("form_modul"):
     col1, col2 = st.columns(2)
@@ -696,7 +704,7 @@ Bab 2: Musisi Indonesia di Pentas Dunia (Sub-bab: A. Mengenal Alat Musik, B. Waw
     pilihan_dokumen = st.multiselect(
         "Pilih dokumen yang ingin di-generate otomatis",
         ["Modul Ajar (Per Bab)", "LKPD Siswa (Per Bab)", "Capaian Pembelajaran (CP)", "Alur Tujuan Pembelajaran (ATP)", "Prota", "Promes", "KKTP", "Jurnal Mengajar (Global)"],
-        default=["Modul Ajar (Per Bab)", "LKPD Siswa (Per Bab)", "Capaian Pembelajaran (CP)", "Promes", "KKTP"]
+        default=["Modul Ajar (Per Bab)", "LKPD Siswa (Per Bab)", "Capaian Pembelajaran (CP)", "Promes", "KKTP", "Jurnal Mengajar (Global)"]
     )
 
     submitted = st.form_submit_button("✨ Eksekusi & Generate Semua Dokumen", use_container_width=True)
@@ -734,12 +742,10 @@ if submitted:
                 
                 st.write(f"🔄 **Sedang memproses {bab_name} ({jml_pert} Pertemuan)...**")
                 
-                # TAHAP 1
                 st.info("Tahap 1: Desain Pembelajaran Modul..."); d1_ctx = call_ai(prompt_step_1(form, bab_name)); time.sleep(3)
                 
-                # TAHAP 2: LOOPING DENGAN SISTEM BATCH (3 PERTEMUAN PER REQUEST)
                 d2_pertemuan_list = []
-                batches = create_batches(jml_pert, 3) # Membagi misal 5 jadi [1,2,3] dan [4,5]
+                batches = create_batches(jml_pert, 4) 
                 
                 for batch in batches:
                     st.info(f"Tahap 2: Pengalaman Belajar Modul (Memproses Pertemuan {batch})...")
@@ -749,7 +755,6 @@ if submitted:
                     time.sleep(3)
                 d2_ctx = {"pertemuan": d2_pertemuan_list}
 
-                # TAHAP 3 & 4
                 st.info("Tahap 3: Asesmen, Rubrik & Materi Ajar..."); d3_ctx = call_ai(prompt_step_3(form, bab_name, jml_pert, d2_ctx)); time.sleep(3)
                 st.info("Tahap 4: Remedial, Glosarium & Lampiran Akhir..."); d4_ctx = call_ai(prompt_step_4(form, bab_name, jml_pert)); time.sleep(3)
                 
@@ -762,7 +767,6 @@ if submitted:
                     
                 if "LKPD Siswa (Per Bab)" in pilihan_dokumen:
                     combined_lkpd_list = []
-                    # BATCHING JUGA DITERAPKAN DI LKPD (3 LKPD sekaligus)
                     for batch in batches:
                         st.info(f"Tahap Khusus: Pembuatan LKPD Interaktif (Memproses Pertemuan {batch})...")
                         lkpd_resp = call_ai(prompt_lkpd_interaktif_batch(form, bab_name, batch))
