@@ -1,10 +1,10 @@
 """
 Generator Dokumen Admin Guru MI (KBC & KMA 1503/2025)
 --------------------------------------------------------------------------------
-Pembaruan V4.17 (Auto-Reject Edition): 
-Perbaikan fungsi call_ai dengan memindahkan validasi JSON ke DALAM loop. 
-Jika JSON terpotong/rusak, sistem akan otomatis me-reject dan memaksa AI mengulang 
-sehingga mencegah hasil dokumen CP, Promes, KKTP, dan Jurnal menjadi kosong.
+Pembaruan V4.18 (The Bulletproof Edition): 
+1. Mengembalikan Aturan Anti-Kutip Ganda agar JSON tidak crash.
+2. Menurunkan Batch Size ke 2 (Super Aman dari terpotong).
+3. Menambahkan Auto-Repair JSON (Jika kurang kurung tutup, sistem akan menambalnya, BUKAN membuangnya).
 """
 
 import io
@@ -29,13 +29,6 @@ COLOR_TITLE = "6C5CE7"
 COLOR_IDENTITY_HEAD = "0984E3"   
 COLOR_LABEL = "DEEAF1"       
 COLOR_VALUE = "FFFFFF"       
-COLOR_SECTION_A = "00B894"   
-COLOR_SECTION_B = "E17055"   
-COLOR_MEETING = "F39C12"     
-COLOR_LAMPIRAN_I = "D63031"  
-COLOR_LAMPIRAN_II = "00CEC9" 
-COLOR_LAMPIRAN_III = "E84393" 
-COLOR_LAMPIRAN_V = "F39C12"  
 
 MODEL_NAME = "google/diffusiongemma-26b-a4b-it"
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
@@ -48,7 +41,7 @@ JENJANG_FASE = {
     "Kelas 12 SMA/MA (Fase F)": "F",
 }
 
-st.set_page_config(page_title="MIFSAL ADMIN GURU V4.17", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="MIFSAL ADMIN GURU V4.18", page_icon="🛡️", layout="wide")
 
 @st.cache_resource
 def get_client():
@@ -58,15 +51,18 @@ def get_client():
         st.stop()
     return OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key)
 
-# FUNGSI call_ai TELAH DIPERKUAT (AUTO-REJECT JIKA JSON RUSAK)
+# FUNGSI call_ai SUPER KEBAL (DENGAN AUTO-REPAIR JSON)
 def call_ai(prompt: str, temperature=0.7) -> dict:
     client = get_client()
     max_retries = 4
     
+    # Injeksi aturan anti-crash ke semua prompt secara otomatis
+    safe_prompt = prompt + "\n\n[ATURAN FORMAT MUTLAK]: DILARANG KERAS menggunakan tanda kutip ganda (\") di dalam teks/nilai string. Jika butuh, gunakan kutip tunggal ('). Balas HANYA dengan JSON valid."
+    
     for attempt in range(max_retries):
         try:
             response = client.chat.completions.create(
-                model=MODEL_NAME, messages=[{"role": "user", "content": prompt}],
+                model=MODEL_NAME, messages=[{"role": "user", "content": safe_prompt}],
                 temperature=temperature, max_tokens=12192,
             )
             raw_content = response.choices[0].message.content
@@ -78,27 +74,38 @@ def call_ai(prompt: str, temperature=0.7) -> dict:
                 
             text = raw_content.strip()
             text = text.replace("```json", "").replace("```", "").strip()
+            
             start = text.find('{')
             end = text.rfind('}')
-            if start != -1 and end != -1: 
-                text = text[start:end+1]
+            if start != -1: 
+                # Jika tidak menemukan kurung tutup, ambil sampai akhir
+                text = text[start:end+1] if end != -1 else text[start:]
                 
             text = text.replace('\n', ' ').replace('\r', '')
             text = re.sub(r'[\x00-\x1f]', '', text)
-            text = re.sub(r',\s*([}\]])', r'\1', text)
+            text = re.sub(r',\s*([}\]])', r'\1', text) # Hapus koma gantung
             
-            # VALIDASI JSON DI DALAM LOOP. Jika gagal, paksa AI mengulang!
+            # --- AUTO-REPAIR JSON (Menambal Kurung yang Terpotong) ---
+            kurung_kurawal_buka = text.count('{')
+            kurung_kurawal_tutup = text.count('}')
+            kurung_siku_buka = text.count('[')
+            kurung_siku_tutup = text.count(']')
+            
+            if kurung_kurawal_buka > kurung_kurawal_tutup:
+                text += '}' * (kurung_kurawal_buka - kurung_kurawal_tutup)
+            if kurung_siku_buka > kurung_siku_tutup:
+                text += ']' * (kurung_siku_buka - kurung_siku_tutup)
+            
             parsed_json = json.loads(text)
             st.session_state["raw_ai_output"] = text 
-            return parsed_json # Keluar jika sukses
+            return parsed_json 
             
         except json.JSONDecodeError as e:
-            # Jika JSON cacat/terpotong, ulang prosesnya
             print(f"JSON Cacat (Attempt {attempt+1}): {e}")
             if attempt < max_retries - 1:
                 time.sleep(5)
                 continue
-            return {} # Gagal setelah 4 kali coba
+            return {} 
             
         except Exception as e:
             if "429" in str(e) or "Too Many Requests" in str(e):
@@ -128,7 +135,7 @@ def get_aggregated_sinkronisasi_context(all_chapters_data):
         return f"\n\n[SANGAT PENTING - MASTER SINKRONISASI DOKUMEN]\nKamu WAJIB mematuhi data dari seluruh Bab berikut agar semua dokumen selaras:\n{sinkron_text}\nRangkum dan susun secara logis."
     return ""
 
-def create_batches(total_items, batch_size=3):
+def create_batches(total_items, batch_size=2):
     return [list(range(i, min(i + batch_size, total_items + 1))) for i in range(1, total_items + 1, batch_size)]
 
 # ==============================================================================
@@ -143,7 +150,7 @@ Balas HANYA JSON:
 
 def prompt_step_2_batch(form, bab_name, batch_list):
     return f"""Rancang Pengalaman Belajar Modul Ajar Mapel {form['mapel']}, Bab: {bab_name}, KHUSUS PERTEMUAN KE-{batch_list}.
-[ATURAN MUTLAK]: Buat aktivitas berurutan untuk pertemuan {batch_list} di dalam array 'pertemuan'.
+Buat aktivitas berurutan untuk pertemuan {batch_list} di dalam array 'pertemuan'.
 Balas HANYA JSON dengan struktur list objek:
 {{"pertemuan": [{{"nomor": {batch_list[0]}, "materi": "Nama Sub-Bab", "durasi": "1 x 35 Menit", "pembukaan": {{"waktu": "10'", "aktivitas": ["Langkah guru & siswa 1"]}}, "inti_memahami": {{"sintak_pbl": "Langkah 1: Orientasi", "aktivitas": ["Aktivitas spesifik 1"]}}, "inti_mengaplikasikan": {{"sintak_pbl": "Langkah 2: Eksplorasi", "aktivitas": ["Tugas spesifik 1"]}}, "inti_merefleksikan": {{"sintak_pbl": "Langkah 5: Evaluasi", "aktivitas": ["Refleksi spesifik 1"]}}, "penutup": {{"waktu": "10'", "aktivitas": ["Kesimpulan spesifik"]}}}}]}}"""
 
@@ -192,7 +199,6 @@ def prompt_promes(form, aggregated_context):
 def prompt_kktp_per_bab(form, bab_name, tp_list):
     return f"""Buat KKTP Mapel {form['mapel']} {form['kelas']}. KHUSUS BAB INI: {bab_name}. Tujuan Pembelajaran: {tp_list}\nBuat tabel indikator lengkap. Balas HANYA JSON: {{"rows": [{{"tp": "str", "kriteria": "str"}}]}}"""
 
-# DIPERKUAT: TAHAN BANTING JIKA AI GAGAL GENERATE
 def generate_jurnal_otomatis(form, all_chapters_data):
     jurnal_rows = []
     pertemuan_global = 1
@@ -203,7 +209,6 @@ def generate_jurnal_otomatis(form, all_chapters_data):
             if not isinstance(p, dict): continue
             topik_materi = p.get("materi", bab_name) 
             
-            # Cek berbagai struktur yang mungkin dihalusinasikan AI
             akt_utama = "Kegiatan Pembelajaran (KBC)"
             if "inti_mengaplikasikan" in p and "aktivitas" in p["inti_mengaplikasikan"]:
                 akt = p["inti_mengaplikasikan"]["aktivitas"]
@@ -217,7 +222,6 @@ def generate_jurnal_otomatis(form, all_chapters_data):
             jurnal_rows.append({"pertemuan": str(pertemuan_global), "topik": topik_materi, "aktivitas": akt_utama, "asesmen": "Formatif/Lisan/Penugasan"})
             pertemuan_global += 1
     return {"rows": jurnal_rows}
-
 
 # ==============================================================================
 # FUNGSI PEMBANTU FORMATTING DOCX
@@ -262,7 +266,6 @@ def create_header(doc, title, form):
     doc.add_paragraph(f"Mata Pelajaran: {form['mapel']}\nNama Sekolah: {form['sekolah']}")
     if "Penyusun" in title or "ATP" in title or "KKTP" in title: doc.add_paragraph(f"Nama Penyusun: {form['penyusun']}")
     doc.add_paragraph(f"Fase/Kelas: {form['kelas']}\nTahun Ajaran: {form['tahun_pelajaran']}\n")
-
 
 # ==============================================================================
 # BUILDERS (Global)
@@ -392,7 +395,7 @@ def build_jurnal(form, ai_data):
     buf = io.BytesIO(); doc.save(buf); buf.seek(0); return buf.getvalue()
 
 # ==============================================================================
-# BUILDERS (Cover, Modul, dan LKPD Per Bab)
+# BUILDERS (Cover, Modul, dan LKPD)
 # ==============================================================================
 def build_cover(form: dict, jenis_cover: str) -> bytes:
     is_landscape = (jenis_cover in ["Cover Program Tahunan & Semester", "Cover CP", "Cover ATP"])
@@ -663,8 +666,8 @@ def build_lkpd_per_bab(form, bab_name, d5_lkpd_data):
 # ==============================================================================
 # UI STREAMLIT 
 # ==============================================================================
-st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4.17 ")
-st.markdown("*Berbasis Model Lagos AI 9.1 - Auto-Reject System (Fix Blank Documents)*")
+st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4.18 ")
+st.markdown("*Berbasis Model Lagos AI 9.1 - Bulletproof Edition (Anti-Kosong)*")
 
 with st.form("form_modul"):
     col1, col2 = st.columns(2)
@@ -745,7 +748,8 @@ if submitted:
                 st.info("Tahap 1: Desain Pembelajaran Modul..."); d1_ctx = call_ai(prompt_step_1(form, bab_name)); time.sleep(3)
                 
                 d2_pertemuan_list = []
-                batches = create_batches(jml_pert, 4) 
+                # KEMBALI KE BATCH SIZE 2 AGAR SANGAT AMAN
+                batches = create_batches(jml_pert, 2) 
                 
                 for batch in batches:
                     st.info(f"Tahap 2: Pengalaman Belajar Modul (Memproses Pertemuan {batch})...")
