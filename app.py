@@ -57,7 +57,7 @@ def get_client():
         st.stop()
     return OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key)
 
-def call_ai(prompt: str, temperature=0.7) -> dict:
+def call_ai(prompt: str, temperature=0.2) -> dict:
     client = get_client()
     text = ""
     max_retries = 4
@@ -66,7 +66,7 @@ def call_ai(prompt: str, temperature=0.7) -> dict:
         try:
             response = client.chat.completions.create(
                 model=MODEL_NAME, messages=[{"role": "user", "content": prompt}],
-                temperature=temperature, max_tokens=12192,
+                temperature=temperature, max_tokens=16192,
             )
             raw_content = response.choices[0].message.content
             if raw_content is None:
