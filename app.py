@@ -1,9 +1,9 @@
 """
 Generator Dokumen Admin Guru MI (KBC & KMA 1503/2025)
 --------------------------------------------------------------------------------
-Pembaruan V4.11: 
-1. Penambahan fitur injeksi "Sub-Bab" agar materi pertemuan 100% akurat sesuai buku paket.
-2. Prompts disesuaikan agar AI memecah pertemuan dan LKPD berdasarkan Sub-Bab yang diinput.
+Pembaruan V4.13 (Joyful Edition): 
+Perubahan total pada UI Docx Color Palette menjadi lebih ceria, warna-warni (vibrant & pastel), 
+mendukung prinsip Joyful Learning secara visual tanpa mengurangi formalitas dokumen.
 """
 
 import io
@@ -22,19 +22,19 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
 # ==============================================================================
-# PALET WARNA & KONFIGURASI
+# PALET WARNA JOYFUL (VIBRANT & PASTEL)
 # ==============================================================================
-COLOR_TITLE = "1F4E79"       
-COLOR_IDENTITY_HEAD = "2E75B6"   
-COLOR_LABEL = "DEEAF1"       
-COLOR_VALUE = "FFFFFF"       
-COLOR_SECTION_A = "1F4E79"   
-COLOR_SECTION_B = "375623"   
-COLOR_MEETING = "843C0C"     
-COLOR_LAMPIRAN_I = "C00000"  
-COLOR_LAMPIRAN_II = "375623"  
-COLOR_LAMPIRAN_III = "006060"  
-COLOR_LAMPIRAN_V = "2E75B6"  
+COLOR_TITLE = "6C5CE7"       # Vibrant Purple (Ungu Ceria)
+COLOR_IDENTITY_HEAD = "0984E3"   # Bright Blue (Biru Terang)
+COLOR_LABEL = "DEEAF1"       # Soft Blue Label
+COLOR_VALUE = "FFFFFF"       # Putih
+COLOR_SECTION_A = "00B894"   # Mint Green (Hijau Segar)
+COLOR_SECTION_B = "E17055"   # Warm Coral (Oranye Hangat)
+COLOR_MEETING = "F39C12"     # Sunny Orange
+COLOR_LAMPIRAN_I = "D63031"  # Vibrant Red
+COLOR_LAMPIRAN_II = "00CEC9" # Bright Teal (Tosca)
+COLOR_LAMPIRAN_III = "E84393" # Playful Pink (Merah Muda Ceria)
+COLOR_LAMPIRAN_V = "F39C12"  # Sunny Yellow/Orange
 
 MODEL_NAME = "google/diffusiongemma-26b-a4b-it"
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
@@ -47,7 +47,7 @@ JENJANG_FASE = {
     "Kelas 12 SMA/MA (Fase F)": "F",
 }
 
-st.set_page_config(page_title="MIFSAL ADMIN GURU V4.11", page_icon="📘", layout="wide")
+st.set_page_config(page_title="MIFSAL ADMIN GURU V4.13", page_icon="🎨", layout="wide")
 
 @st.cache_resource
 def get_client():
@@ -66,7 +66,7 @@ def call_ai(prompt: str, temperature=0.7) -> dict:
         try:
             response = client.chat.completions.create(
                 model=MODEL_NAME, messages=[{"role": "user", "content": prompt}],
-                temperature=temperature, max_tokens=12192,
+                temperature=temperature, max_tokens=16192,
             )
             raw_content = response.choices[0].message.content
             if raw_content is None:
@@ -118,7 +118,7 @@ def get_aggregated_sinkronisasi_context(all_chapters_data):
     return ""
 
 # ==============================================================================
-# PROMPT MODUL AJAR (DIPERKETAT UNTUK DISTRIBUSI SUB-BAB)
+# PROMPT MODUL AJAR 
 # ==============================================================================
 def prompt_step_1(form, bab_name):
     return f"""Kamu pakar Kurikulum Merdeka Pendekatan Deep Learning Berbasis Cinta (KBC). 
@@ -209,18 +209,15 @@ Balas HANYA JSON: {{"rows": [{{"tp": "str", "kriteria": "str"}}]}}"""
 def generate_jurnal_otomatis(form, all_chapters_data):
     jurnal_rows = []
     pertemuan_global = 1
-    
     for chap in all_chapters_data:
         bab_name = chap.get("bab", "Materi")
         d2 = chap.get("d2", {})
         pertemuan_list = safe_list(d2.get("pertemuan", []))
-        
         for p in pertemuan_list:
             if not isinstance(p, dict): continue
             topik_materi = p.get("materi", bab_name) # Sudah memuat Sub-Bab
             akt = p.get("inti_mengaplikasikan", {}).get("aktivitas", ["Pembelajaran KBC"])
             aktivitas_utama = str(akt[0]) if isinstance(akt, list) and len(akt) > 0 else str(akt)
-            
             jurnal_rows.append({
                 "pertemuan": str(pertemuan_global),
                 "topik": topik_materi,
@@ -228,7 +225,6 @@ def generate_jurnal_otomatis(form, all_chapters_data):
                 "asesmen": "Formatif/Lisan/Penugasan LKPD"
             })
             pertemuan_global += 1
-            
     return {"rows": jurnal_rows}
 
 
@@ -319,8 +315,186 @@ def create_header(doc, title, form):
     doc.add_paragraph(f"Tahun Ajaran: {form['tahun_pelajaran']}")
     doc.add_paragraph()
 
+
 # ==============================================================================
-# BUILDERS (Cover & Document Builders)
+# BUILDERS (Global)
+# ==============================================================================
+def build_cp(form, ai_data):
+    doc = create_base_doc(landscape=False)
+    create_header(doc, "CAPAIAN PEMBELAJARAN (CP)", form)
+    
+    doc.add_heading("A. Rasional Mata Pelajaran", level=3)
+    doc.add_paragraph(ai_data.get("rasional", ""))
+    
+    doc.add_heading("B. Tujuan Mata Pelajaran", level=3)
+    for t in safe_list(ai_data.get("tujuan", [])): 
+        doc.add_paragraph(t, style='List Bullet')
+        
+    doc.add_heading("C. Elemen-elemen Mata Pelajaran", level=3)
+    t_elemen = doc.add_table(rows=1, cols=2)
+    t_elemen.style = 'Table Grid'
+    set_cell_background(t_elemen.cell(0, 0), "D6EAF8"); style_cell(t_elemen.cell(0, 0), "Elemen", bold=True)
+    set_cell_background(t_elemen.cell(0, 1), "D6EAF8"); style_cell(t_elemen.cell(0, 1), "Deskripsi", bold=True)
+    t_elemen.columns[0].width = Cm(4.0); t_elemen.columns[1].width = Cm(14.0)
+    for el in safe_list(ai_data.get("elemen", [])):
+        if isinstance(el, dict):
+            r = t_elemen.add_row().cells
+            style_cell(r[0], el.get("nama", "")); style_cell(r[1], el.get("deskripsi", ""))
+    doc.add_paragraph()
+    
+    doc.add_heading(f"D. Capaian Pembelajaran Fase", level=3)
+    doc.add_paragraph(ai_data.get("cp_paragraf", ""))
+    t_cp = doc.add_table(rows=1, cols=2)
+    t_cp.style = 'Table Grid'
+    set_cell_background(t_cp.cell(0, 0), "D6EAF8"); style_cell(t_cp.cell(0, 0), "Elemen", bold=True)
+    set_cell_background(t_cp.cell(0, 1), "D6EAF8"); style_cell(t_cp.cell(0, 1), "Capaian Pembelajaran", bold=True)
+    t_cp.columns[0].width = Cm(4.0); t_cp.columns[1].width = Cm(14.0)
+    for cp in safe_list(ai_data.get("cp_tabel", [])):
+        if isinstance(cp, dict):
+            r = t_cp.add_row().cells
+            style_cell(r[0], cp.get("elemen", "")); style_cell(r[1], cp.get("capaian", ""))
+            
+    buf = io.BytesIO(); doc.save(buf); buf.seek(0)
+    return buf.getvalue()
+
+def build_atp(form, ai_data):
+    doc = create_base_doc(landscape=True)
+    create_header(doc, "ALUR TUJUAN PEMBELAJARAN (ATP)", form)
+    table = doc.add_table(rows=1, cols=6)
+    table.style = 'Table Grid'
+    headers = ["No.", "Elemen", "Tujuan Pembelajaran (TP) per Bab", "Alur Tujuan Pembelajaran (ATP)", "Materi Pokok", "Alokasi Waktu (JP)"]
+    for i, h in enumerate(headers):
+        set_cell_background(table.cell(0, i), "FCF3CF"); style_cell(table.cell(0, i), h, bold=True, center=True)
+    table.columns[0].width = Cm(1.0); table.columns[5].width = Cm(2.0)
+    
+    for row in safe_list(ai_data.get("rows"), []):
+        if not isinstance(row, dict): continue
+        r = table.add_row().cells
+        style_cell(r[0], row.get("no", ""), center=True); style_cell(r[1], row.get("elemen", ""))
+        style_cell(r[2], row.get("tp", "")); style_cell(r[3], row.get("atp", ""))
+        style_cell(r[4], row.get("materi", "")); style_cell(r[5], row.get("jp", ""), center=True)
+        
+    add_signatures(doc, form, full_width=True)
+    buf = io.BytesIO(); doc.save(buf); buf.seek(0)
+    return buf.getvalue()
+
+def build_prota(form, ai_data):
+    doc = create_base_doc(landscape=False)
+    create_header(doc, "PROGRAM TAHUNAN (PROTA)", form)
+    table = doc.add_table(rows=1, cols=5)
+    table.style = 'Table Grid'
+    headers = ["Semester", "No", "Materi Pokok / Bab", "Alokasi Waktu (JP)", "Keterangan"]
+    for i, h in enumerate(headers):
+        set_cell_background(table.cell(0, i), "D1F2EB"); style_cell(table.cell(0, i), h, bold=True, center=True)
+    table.columns[0].width = Cm(2.5); table.columns[1].width = Cm(1.0); table.columns[3].width = Cm(3.0)
+    
+    for row in safe_list(ai_data.get("rows"), []):
+        if not isinstance(row, dict): continue
+        r = table.add_row().cells
+        style_cell(r[0], row.get("semester", ""), center=True); style_cell(r[1], row.get("no", ""), center=True)
+        style_cell(r[2], row.get("materi", "")); style_cell(r[3], row.get("jp", ""), center=True)
+        style_cell(r[4], row.get("keterangan", ""), center=True)
+        
+    add_signatures(doc, form)
+    buf = io.BytesIO(); doc.save(buf); buf.seek(0)
+    return buf.getvalue()
+
+def build_promes(form, ai_data):
+    doc = create_base_doc(landscape=True)
+    create_header(doc, "PROGRAM SEMESTER (PROSEM)", form)
+    
+    tables_data = safe_list(ai_data.get("tables", []))
+    for t_data in tables_data:
+        if not isinstance(t_data, dict): continue
+        judul_sem = t_data.get("judul_semester", "SEMESTER")
+        doc.add_heading(judul_sem, level=2)
+        bulan_list = safe_list(t_data.get("bulan", []))
+        if not bulan_list: continue
+        
+        total_cols = 2 + (len(bulan_list) * 5)
+        table = doc.add_table(rows=2, cols=total_cols)
+        table.style = 'Table Grid'
+        
+        table.cell(0, 0).merge(table.cell(1, 0)); style_cell(table.cell(0, 0), "Materi / Tujuan Pembelajaran", bold=True, center=True)
+        table.cell(0, 1).merge(table.cell(1, 1)); style_cell(table.cell(0, 1), "JP", bold=True, center=True)
+        set_cell_background(table.cell(0, 0), "FADBD8"); set_cell_background(table.cell(0, 1), "FADBD8")
+        table.columns[0].width = Cm(6.0); table.columns[1].width = Cm(1.5)
+        
+        col_idx = 2
+        for b in bulan_list:
+            table.cell(0, col_idx).merge(table.cell(0, col_idx + 4))
+            style_cell(table.cell(0, col_idx), b, bold=True, center=True)
+            set_cell_background(table.cell(0, col_idx), "FADBD8")
+            for w in range(5):
+                style_cell(table.cell(1, col_idx + w), str(w + 1), bold=True, center=True)
+                set_cell_background(table.cell(1, col_idx + w), "FDEDEC")
+                table.columns[col_idx + w].width = Cm(0.6)
+            col_idx += 5
+            
+        for row in safe_list(t_data.get("rows", [])):
+            if not isinstance(row, dict): continue
+            r = table.add_row().cells
+            jenis = row.get("jenis", "sub"); materi = row.get("materi", ""); jp = str(row.get("jp", ""))
+            is_bab = (jenis == "bab")
+            
+            style_cell(r[0], materi, bold=is_bab); style_cell(r[1], jp, bold=is_bab, center=True)
+            if is_bab:
+                set_cell_background(r[0], "FCF3CF"); set_cell_background(r[1], "FCF3CF")
+                
+            distribusi = safe_list(row.get("distribusi", []))
+            for dist in distribusi:
+                if not isinstance(dist, dict): continue
+                d_bulan = dist.get("bulan", ""); d_minggu = int(dist.get("minggu", 1)); d_jp = str(dist.get("jp", ""))
+                try:
+                    b_idx = bulan_list.index(d_bulan)
+                    c_idx = 2 + (b_idx * 5) + (d_minggu - 1)
+                    if 2 <= c_idx < total_cols: style_cell(r[c_idx], d_jp, center=True)
+                except ValueError: pass
+        doc.add_paragraph()
+        
+    add_signatures(doc, form, full_width=True)
+    buf = io.BytesIO(); doc.save(buf); buf.seek(0)
+    return buf.getvalue()
+
+def build_kktp(form, combined_kktp_data):
+    doc = create_base_doc(landscape=False)
+    create_header(doc, "KRITERIA KETERCAPAIAN TUJUAN PEMBELAJARAN (KKTP)", form)
+    table = doc.add_table(rows=1, cols=2)
+    table.style = 'Table Grid'
+    for i, h in enumerate(["Tujuan Pembelajaran (TP)", "Kriteria Ketercapaian (Indikator)"]):
+        set_cell_background(table.cell(0, i), "E8DAEF"); style_cell(table.cell(0, i), h, bold=True, center=True)
+    
+    for row in safe_list(combined_kktp_data.get("rows"), []):
+        if not isinstance(row, dict): continue
+        r = table.add_row().cells
+        style_cell(r[0], row.get("tp", "")); style_cell(r[1], row.get("kriteria", ""))
+    
+    add_signatures(doc, form)
+    buf = io.BytesIO(); doc.save(buf); buf.seek(0)
+    return buf.getvalue()
+
+def build_jurnal(form, ai_data):
+    doc = create_base_doc(landscape=False)
+    create_header(doc, "JURNAL MENGAJAR HARIAN (GABUNGAN)", form)
+    table = doc.add_table(rows=1, cols=5)
+    table.style = 'Table Grid'
+    for i, h in enumerate(["Pertemuan", "Topik / Materi", "Aktivitas", "Asesmen", "Ket/Paraf"]):
+        set_cell_background(table.cell(0, i), COLOR_TITLE); style_cell(table.cell(0, i), h, bold=True, color="FFFFFF", center=True)
+        
+    for row in safe_list(ai_data.get("rows"), []):
+        if not isinstance(row, dict): continue
+        r = table.add_row().cells
+        style_cell(r[0], row.get("pertemuan", ""), center=True)
+        style_cell(r[1], row.get("topik", "")); style_cell(r[2], row.get("aktivitas", ""))
+        style_cell(r[3], row.get("asesmen", "")); style_cell(r[4], "") 
+        
+    add_signatures(doc, form)
+    buf = io.BytesIO(); doc.save(buf); buf.seek(0)
+    return buf.getvalue()
+
+
+# ==============================================================================
+# BUILDERS (Cover, Modul, dan LKPD Per Bab)
 # ==============================================================================
 def build_cover(form: dict, jenis_cover: str) -> bytes:
     is_landscape = (jenis_cover in ["Cover Program Tahunan & Semester", "Cover CP", "Cover ATP"])
@@ -383,11 +557,11 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
     for i, (k1, v1, k2, v2) in enumerate(id_data):
         if i >= len(t_id.rows): t_id.add_row()
         row = t_id.rows[i].cells
-        style_cell(row[0], k1, bold=True); set_cell_background(row[0], "EFEFEF")
+        style_cell(row[0], k1, bold=True); set_cell_background(row[0], "D6EAF8")
         style_cell(row[1], v1)
         if k2 == "": row[1].merge(row[3])
         else:
-            style_cell(row[2], k2, bold=True); set_cell_background(row[2], "EFEFEF")
+            style_cell(row[2], k2, bold=True); set_cell_background(row[2], "D6EAF8")
             style_cell(row[3], v2)
     doc.add_paragraph()
 
@@ -397,7 +571,7 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
     ident_src = d1.get("identifikasi", {}) if isinstance(d1.get("identifikasi"), dict) else {}
     for label, key in [("Pengetahuan Awal", "pengetahuan_awal"), ("Minat Belajar", "minat_belajar"), ("Latar Belakang", "latar_belakang"), ("Kebutuhan Belajar", "kebutuhan_belajar"), ("Dimensi Profil Kelulusan (DPL)", "dimensi_profil"), ("Topik Panca Cinta", "panca_cinta")]:
         r = t_ident.add_row().cells
-        style_cell(r[0], label, bold=True); set_cell_background(r[0], "EFEFEF")
+        style_cell(r[0], label, bold=True); set_cell_background(r[0], "D1F2EB")
         items = safe_list(ident_src.get(key)); r[1].text = ""
         for idx, item in enumerate(items):
             p = r[1].paragraphs[0] if idx == 0 else r[1].add_paragraph()
@@ -411,7 +585,7 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
     desain_src = d1.get("desain", {}) if isinstance(d1.get("desain"), dict) else {}
     for label, key in [("Capaian Pembelajaran (CP)", "capaian_pembelajaran"), ("Tujuan Pembelajaran (TP)", "tujuan_pembelajaran"), ("Lintas Disiplin Ilmu", "lintas_disiplin"), ("Topik Pembelajaran", "topik_pembelajaran"), ("Praktik Pedagogi", "praktik_pedagogi"), ("Lingkungan Belajar", "lingkungan_belajar"), ("Kemitraan Pembelajaran", "kemitraan_pembelajaran"), ("Pemanfaatan Digital", "pemanfaatan_digital")]:
         r = t_desain.add_row().cells
-        style_cell(r[0], label, bold=True); set_cell_background(r[0], "EFEFEF")
+        style_cell(r[0], label, bold=True); set_cell_background(r[0], "FADBD8")
         items = safe_list(desain_src.get(key)); r[1].text = ""
         for idx, item in enumerate(items):
             p = r[1].paragraphs[0] if idx == 0 else r[1].add_paragraph()
@@ -430,7 +604,7 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
         t_pem = doc.add_table(rows=2, cols=4); t_pem.style = 'Table Grid'
         t_pem.columns[0].width = Cm(4.0); t_pem.columns[1].width = Cm(9.0); t_pem.columns[2].width = Cm(2.0); t_pem.columns[3].width = Cm(3.0)
         h_pem = t_pem.rows[0].cells
-        for i, txt in enumerate(["FASE KEGIATAN", "AKTIVITAS PEMBELAJARAN", "WAKTU", "PRINSIP DL"]): style_cell(h_pem[i], txt, bold=True, center=True); set_cell_background(h_pem[i], "EFEFEF")
+        for i, txt in enumerate(["FASE KEGIATAN", "AKTIVITAS PEMBELAJARAN", "WAKTU", "PRINSIP DL"]): style_cell(h_pem[i], txt, bold=True, center=True); set_cell_background(h_pem[i], "FCF3CF")
         r_pem = t_pem.rows[1].cells
         r_pem[0].text = "PEMBUKAAN\n(Meaningful – Bermakna)"
         pem_data = p.get("pembukaan", {}) if isinstance(p.get("pembukaan"), dict) else {}
@@ -442,7 +616,7 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
         t_inti = doc.add_table(rows=4, cols=4); t_inti.style = 'Table Grid'
         t_inti.columns[0].width = Cm(4.0); t_inti.columns[1].width = Cm(4.5); t_inti.columns[2].width = Cm(6.5); t_inti.columns[3].width = Cm(3.0)
         h_inti = t_inti.rows[0].cells
-        for i, txt in enumerate(["PENGALAMAN BELAJAR", "SINTAK PBL", "AKTIVITAS PEMBELAJARAN (KEGIATAN INTI)", "PRINSIP DL"]): style_cell(h_inti[i], txt, bold=True, center=True); set_cell_background(h_inti[i], "EFEFEF")
+        for i, txt in enumerate(["PENGALAMAN BELAJAR", "SINTAK PBL", "AKTIVITAS PEMBELAJARAN (KEGIATAN INTI)", "PRINSIP DL"]): style_cell(h_inti[i], txt, bold=True, center=True); set_cell_background(h_inti[i], "E8DAEF")
         inti_phases = [("MEMAHAMI", p.get("inti_memahami", {}), "MINDFUL\n(Berkesadaran)"), ("MENGAPLIKASIKAN", p.get("inti_mengaplikasikan", {}), "JOYFUL\n(Menggembirakan)"), ("MEREFLEKSIKAN", p.get("inti_merefleksikan", {}), "MEANINGFUL\n(Bermakna)")]
         for idx, (nama_fase, data_fase, prinsip) in enumerate(inti_phases, 1):
             if not isinstance(data_fase, dict): data_fase = {}
@@ -454,7 +628,7 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
         t_pen = doc.add_table(rows=2, cols=4); t_pen.style = 'Table Grid'
         t_pen.columns[0].width = Cm(4.0); t_pen.columns[1].width = Cm(9.0); t_pen.columns[2].width = Cm(2.0); t_pen.columns[3].width = Cm(3.0)
         h_pen = t_pen.rows[0].cells
-        for i, txt in enumerate(["FASE KEGIATAN", "AKTIVITAS PEMBELAJARAN", "WAKTU", "PRINSIP DL"]): style_cell(h_pen[i], txt, bold=True, center=True); set_cell_background(h_pen[i], "EFEFEF")
+        for i, txt in enumerate(["FASE KEGIATAN", "AKTIVITAS PEMBELAJARAN", "WAKTU", "PRINSIP DL"]): style_cell(h_pen[i], txt, bold=True, center=True); set_cell_background(h_pen[i], "D1F2EB")
         r_pen = t_pen.rows[1].cells
         r_pen[0].text = "PENUTUP\n(Mindful – Berkesadaran)"
         pen_data = p.get("penutup", {}) if isinstance(p.get("penutup"), dict) else {}
@@ -469,15 +643,15 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
     pen_src = d3.get("penilaian", {}) if isinstance(d3.get("penilaian"), dict) else {}
     
     r_n1 = t_nilai.add_row().cells
-    style_cell(r_n1[0], "Asesmen Awal (Diagnostik)", bold=True); set_cell_background(r_n1[0], "EFEFEF")
+    style_cell(r_n1[0], "Asesmen Awal (Diagnostik)", bold=True); set_cell_background(r_n1[0], "D6EAF8")
     r_n1[1].text = "\n".join([f"• {a}" for a in safe_list(pen_src.get("awal"))])
     r_n2 = t_nilai.add_row().cells
-    style_cell(r_n2[0], "Asesmen Formatif (As Learning & For Learning)", bold=True); set_cell_background(r_n2[0], "EFEFEF")
+    style_cell(r_n2[0], "Asesmen Formatif (As Learning & For Learning)", bold=True); set_cell_background(r_n2[0], "D6EAF8")
     as_learn = "\n".join([f"• {a}" for a in safe_list(pen_src.get("formatif_as"))])
     for_learn = "\n".join([f"• {a}" for a in safe_list(pen_src.get("formatif_for"))])
     r_n2[1].text = f"As Learning:\n{as_learn}\n\nFor Learning:\n{for_learn}"
     r_n3 = t_nilai.add_row().cells
-    style_cell(r_n3[0], "Asesmen Sumatif (Of Learning)", bold=True); set_cell_background(r_n3[0], "EFEFEF")
+    style_cell(r_n3[0], "Asesmen Sumatif (Of Learning)", bold=True); set_cell_background(r_n3[0], "D6EAF8")
     r_n3[1].text = "\n".join([f"• {a}" for a in safe_list(pen_src.get("sumatif"))])
     doc.add_paragraph()
 
@@ -489,7 +663,7 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
     doc.add_paragraph("B. RUBRIK PENILAIAN SIKAP (Skala 1–4)").bold = True
     t_sikap = doc.add_table(rows=5, cols=5); t_sikap.style = 'Table Grid'
     h_sikap = ["Aspek Sikap", "Skor 4 (Sangat Baik)", "Skor 3 (Baik)", "Skor 2 (Cukup)", "Skor 1 (Perlu Bimb.)"]
-    for i, h in enumerate(h_sikap): style_cell(t_sikap.cell(0, i), h, bold=True, center=True); set_cell_background(t_sikap.cell(0, i), "EFEFEF")
+    for i, h in enumerate(h_sikap): style_cell(t_sikap.cell(0, i), h, bold=True, center=True); set_cell_background(t_sikap.cell(0, i), "FCF3CF")
     sikap_data = [["Disiplin", "Selalu hadir tepat waktu dan mengikuti semua aturan", "Hadir tepat waktu, sedikit pelanggaran kecil", "Sering terlambat atau melanggar beberapa aturan", "Sering tidak hadir tanpa keterangan"], ["Tanggung Jawab", "Menyelesaikan tugas tepat waktu dan berkualitas", "Menyelesaikan tugas meski ada kekurangan kecil", "Tugas sering tidak selesai atau terlambat", "Tugas tidak dikerjakan"], ["Kerjasama", "Aktif berkontribusi dan mendorong anggota lain", "Berkontribusi dalam kelompok secara aktif", "Sesekali berkontribusi jika diminta", "Tidak berkontribusi dalam kelompok"], ["Toleransi", "Sangat menghargai pendapat semua teman", "Menghargai pendapat dengan baik", "Sesekali kurang menghargai pendapat", "Tidak menghargai pendapat teman"]]
     for r_idx, row_data in enumerate(sikap_data, start=1):
         for c_idx, cell_data in enumerate(row_data): style_cell(t_sikap.cell(r_idx, c_idx), cell_data)
@@ -498,7 +672,7 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
     doc.add_paragraph("C. RUBRIK PENILAIAN PENGETAHUAN (Skala 1–4)").bold = True
     t_penget = doc.add_table(rows=1, cols=5); t_penget.style = 'Table Grid'
     h_penget = ["Aspek", "Skor 4", "Skor 3", "Skor 2", "Skor 1"]
-    for i, h in enumerate(h_penget): style_cell(t_penget.cell(0, i), h, bold=True, center=True); set_cell_background(t_penget.cell(0, i), "EFEFEF")
+    for i, h in enumerate(h_penget): style_cell(t_penget.cell(0, i), h, bold=True, center=True); set_cell_background(t_penget.cell(0, i), "FCF3CF")
     for rubrik in safe_list(d3.get("rubrik_pengetahuan", [])):
         if not isinstance(rubrik, dict): continue
         r = t_penget.add_row().cells
@@ -519,28 +693,9 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
         t_mat.columns[0].width = Cm(4.0); t_mat.columns[1].width = Cm(14.0)
         for k, v in [("Pengantar", mat.get("pengantar")), ("Konsep Utama", mat.get("konsep_utama")), ("Contoh Kontekstual", mat.get("contoh"))]:
             r = t_mat.add_row().cells
-            style_cell(r[0], k, bold=True); set_cell_background(r[0], "EFEFEF")
+            style_cell(r[0], k, bold=True); set_cell_background(r[0], "FADBD8")
             r[1].text = str(v)
         doc.add_paragraph()
-
-    doc.add_paragraph("LAMPIRAN III – LKPD (LEMBAR KERJA PESERTA DIDIK)").bold = True
-    for lkpd in safe_list(d3.get("lkpd", [])):
-        if not isinstance(lkpd, dict): continue
-        doc.add_paragraph(f"LKPD PERTEMUAN {lkpd.get('pertemuan', '1')}\n{lkpd.get('judul', 'Materi')}").bold = True
-        doc.add_paragraph("IDENTITAS PESERTA DIDIK").bold = True
-        doc.add_paragraph("Nama: ____________________________  Kelas: ________  No. Absen: ______  Tanggal: __________")
-        doc.add_paragraph("PETUNJUK PENGGUNAAN").bold = True
-        doc.add_paragraph("• Kerjakan secara jujur dan mandiri terlebih dahulu, kemudian diskusikan dengan kelompokmu\n• Baca setiap instruksi dengan teliti sebelum mengerjakan\n• Gunakan buku siswa sebagai sumber referensi")
-        doc.add_paragraph("MEMAHAMI (Deep Learning)").bold = True
-        for m in safe_list(lkpd.get("memahami", [])): doc.add_paragraph(m, style='List Number')
-        doc.add_paragraph()
-        doc.add_paragraph("MENGAPLIKASIKAN").bold = True
-        doc.add_paragraph(str(lkpd.get("mengaplikasikan", "")))
-        doc.add_paragraph("Kolom Pengerjaan:\n________________________________________________________________________________\n________________________________________________________________________________")
-        doc.add_paragraph("MEREFLEKSIKAN").bold = True
-        doc.add_paragraph(str(lkpd.get("merefleksikan", "")) + "\n________________________________________________________________________________")
-        doc.add_paragraph("PEDOMAN PENSKORAN").bold = True
-        doc.add_paragraph("Skor Maksimal: 100 poin  |  Rumus: Nilai Akhir = (Skor Perolehan / Skor Maksimal) × 100\nMemahami (40) + Mengaplikasikan (40) + Merefleksikan (20) = 100 poin\n")
 
     doc.add_paragraph("LAMPIRAN V – TINDAK LANJUT DAN REFLEKSI").bold = True
     doc.add_paragraph("A. PROGRAM REMEDIAL").bold = True
@@ -562,8 +717,8 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
     doc.add_paragraph("C. INSTRUMEN REFLEKSI PEMBELAJARAN").bold = True
     t_ref = doc.add_table(rows=1, cols=2); t_ref.style = 'Table Grid'
     t_ref.columns[0].width = Cm(9.0); t_ref.columns[1].width = Cm(9.0)
-    style_cell(t_ref.cell(0,0), "Refleksi Peserta Didik", bold=True); set_cell_background(t_ref.cell(0,0), "EFEFEF")
-    style_cell(t_ref.cell(0,1), "Refleksi Guru", bold=True); set_cell_background(t_ref.cell(0,1), "EFEFEF")
+    style_cell(t_ref.cell(0,0), "Refleksi Peserta Didik", bold=True); set_cell_background(t_ref.cell(0,0), "D1F2EB")
+    style_cell(t_ref.cell(0,1), "Refleksi Guru", bold=True); set_cell_background(t_ref.cell(0,1), "D1F2EB")
     r_ref2 = t_ref.add_row().cells
     r_ref2[0].text = "1. Apa yang sudah aku pahami dari pembelajaran ini?\n   ________________________________\n2. Apa yang masih terasa sulit bagiku?\n   ________________________________\n3. Bagaimana perasaanku selama belajar hari ini? (Sangat Baik / Cukup / Perlu Perbaikan)\n4. Bagaimana aku bisa menerapkan yang dipelajari?\n   ________________________________"
     r_ref2[1].text = "1. Apakah tujuan pembelajaran tercapai hari ini?\n   ________________________________\n2. Strategi apa yang paling efektif/kurang efektif?\n   ________________________________\n3. Kendala yang muncul selama pembelajaran:\n   ________________________________\n4. Rencana perbaikan untuk pertemuan berikutnya:\n   ________________________________"
@@ -572,8 +727,8 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
     doc.add_paragraph("GLOSARIUM").bold = True
     t_glo = doc.add_table(rows=1, cols=2); t_glo.style = 'Table Grid'
     t_glo.columns[0].width = Cm(4.0); t_glo.columns[1].width = Cm(14.0)
-    style_cell(t_glo.cell(0,0), "ISTILAH", bold=True, center=True); set_cell_background(t_glo.cell(0,0), "EFEFEF")
-    style_cell(t_glo.cell(0,1), "DEFINISI", bold=True, center=True); set_cell_background(t_glo.cell(0,1), "EFEFEF")
+    style_cell(t_glo.cell(0,0), "ISTILAH", bold=True, center=True); set_cell_background(t_glo.cell(0,0), "E8DAEF")
+    style_cell(t_glo.cell(0,1), "DEFINISI", bold=True, center=True); set_cell_background(t_glo.cell(0,1), "E8DAEF")
     for glo in safe_list(d3.get("glosarium", [])):
         if not isinstance(glo, dict): continue
         r = t_glo.add_row().cells
@@ -637,8 +792,8 @@ def build_lkpd_per_bab(form, bab_name, d4_lkpd_data):
 # ==============================================================================
 # UI STREAMLIT 
 # ==============================================================================
-st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4.11 ")
-st.markdown("*Berbasis Model Lagos AI 9.1 - Injeksi Sub-Bab Buku Paket & Format Presisi*")
+st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4.13 ")
+st.markdown("*Berbasis Model Lagos AI 9.1 - Joyful Colors & Full Dokumen*")
 
 with st.form("form_modul"):
     col1, col2 = st.columns(2)
@@ -668,9 +823,9 @@ Bab 2: Musisi Indonesia di Pentas Dunia (Sub-bab: A. Mengenal Alat Musik, B. Waw
 
     with col3:
         titimangsa = st.text_input("Titimangsa", value=titimangsa_otomatis)
-        penyusun = st.text_input("Penyusun (Guru)", placeholder="Nama Guru, S.Pd.")
+        penyusun = st.text_input("Penyusun (Guru)", placeholder="Erian Kurniawan, S.E.")
     with col4:
-        kepala_madrasah = st.text_input("Kepala Madrasah", placeholder="Nama Kepala Sekolah")
+        kepala_madrasah = st.text_input("Kepala Madrasah", placeholder="Drs. Andi Supriadi")
 
     st.divider()
     
