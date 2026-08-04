@@ -52,7 +52,7 @@ def get_client():
     return OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key)
 
 # FUNGSI PEMANGGIL AI (DENGAN INSTRUKSI JSON ANTI-KOSONG)
-def call_ai(prompt: str, temperature=0.7) -> dict:
+def call_ai(prompt: str, temperature=0.4) -> dict:
     client = get_client()
     max_retries = 5
     
@@ -62,7 +62,7 @@ def call_ai(prompt: str, temperature=0.7) -> dict:
         try:
             response = client.chat.completions.create(
                 model=MODEL_NAME, messages=[{"role": "user", "content": safe_prompt}],
-                temperature=temperature, max_tokens=12192,
+                temperature=temperature, max_tokens=16192,
             )
             raw_content = response.choices[0].message.content
             if raw_content is None:
