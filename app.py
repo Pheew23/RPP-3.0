@@ -74,7 +74,7 @@ def calculate_time_breakdown(alokasi_str):
     
     return f"{t_pem}'", f"{t_mem}'", f"{t_meng}'", f"{t_mer}'", f"{t_pen}'"
 
-def call_ai(prompt: str, temperature=0.7) -> dict:
+def call_ai(prompt: str, temperature=0.4) -> dict:
     client = get_client()
     max_retries = 5
     safe_prompt = prompt + "\n\n[ATURAN JSON MUTLAK]: Kamu WAJIB membalas HANYA dengan format JSON murni. Gunakan tanda kutip ganda (\") untuk key dan value. TAPI, jika kamu butuh tanda kutip di DALAM isi teks kalimat, gunakan tanda kutip tunggal (') agar struktur JSON tidak rusak."
@@ -83,7 +83,7 @@ def call_ai(prompt: str, temperature=0.7) -> dict:
         try:
             response = client.chat.completions.create(
                 model=MODEL_NAME, messages=[{"role": "user", "content": safe_prompt}],
-                temperature=temperature, max_tokens=12192,
+                temperature=temperature, max_tokens=16192,
             )
             raw_content = response.choices[0].message.content
             if raw_content is None:
@@ -150,8 +150,8 @@ def get_aggregated_sinkronisasi_context(all_chapters_data, form):
 # PROMPT MODUL AJAR 
 # ==============================================================================
 def prompt_step_1(form, bab_name):
-    return f"""Kamu pakar Kurikulum Merdeka KBC. Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik Utama dan Sub-Bab: {bab_name}. 
-PENTING: CP dan TP WAJIB mengacu "KMA 1503 Tahun 2025". Masukkan rincian Sub-Bab ke dalam 'topik_pembelajaran'.
+    return f"""Kamu pakar Kurikulum Merdeka Deep Learning Bebasis Cinta KBC dengan 5 Pilar Cinta . Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik Utama dan Sub-Bab: {bab_name}. 
+PENTING: CP dan TP WAJIB mengacu "KMA 1503 Tahun 2025".Untuk Panca Cinta Masukan Semua 5 Pilar Cinta Masukkan rincian Sub-Bab ke dalam 'topik_pembelajaran'.
 Balas HANYA JSON:
 {{"identifikasi": {{"pengetahuan_awal": ["str"], "minat_belajar": ["str"], "latar_belakang": "str (1 paragraf panjang)", "kebutuhan_belajar": ["str"], "dimensi_profil": ["str"], "panca_cinta": ["str"]}}, "desain": {{"capaian_pembelajaran": "str", "tujuan_pembelajaran": ["str"], "lintas_disiplin": ["str"], "topik_pembelajaran": ["Rincian Sub-Bab dari judul..."], "praktik_pedagogi": ["str"], "lingkungan_belajar": ["str"], "kemitraan_pembelajaran": ["str"], "pemanfaatan_digital": ["str"]}}}}"""
 
