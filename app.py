@@ -1,10 +1,9 @@
 """
 Generator Dokumen Admin Guru MI (KBC & KMA 1503/2025)
 --------------------------------------------------------------------------------
-Pembaruan V4.25 (Penyempurnaan V4.12): 
-1. Modul Ajar dipecah menjadi 5 TAHAP agar beban AI sangat ringan.
-2. Tahap 2 (Pengalaman Belajar) di-looping PER PERTEMUAN.
-3. Mengembalikan format warna dan struktur paling stabil dari V4.12.
+Pembaruan V4.26 (Time Allocation Fix): 
+Memperbaiki tabel Kegiatan Inti yang sebelumnya tidak memiliki kolom alokasi "WAKTU", 
+serta menginstruksikan AI untuk membagi menit di fase Memahami, Mengaplikasikan, dan Merefleksikan.
 """
 
 import io
@@ -23,7 +22,7 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
 # ==============================================================================
-# PALET WARNA & KONFIGURASI (KEMBALI KE FORMAL ELEGAN V4.12)
+# PALET WARNA & KONFIGURASI 
 # ==============================================================================
 COLOR_TITLE = "1F4E79"       
 COLOR_IDENTITY_HEAD = "2E75B6"   
@@ -41,7 +40,7 @@ JENJANG_FASE = {
     "Kelas 12 SMA/MA (Fase F)": "F",
 }
 
-st.set_page_config(page_title="MIFSAL ADMIN GURU V4.25", page_icon="📘", layout="wide")
+st.set_page_config(page_title="MIFSAL ADMIN GURU V4.26", page_icon="⏱️", layout="wide")
 
 @st.cache_resource
 def get_client():
@@ -51,7 +50,6 @@ def get_client():
         st.stop()
     return OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key)
 
-# PENGUATAN CALL AI: Jika gagal, AI akan disuruh ulang (Tidak Langsung Kosong)
 def call_ai(prompt: str, temperature=0.7) -> dict:
     client = get_client()
     max_retries = 5
@@ -86,7 +84,6 @@ def call_ai(prompt: str, temperature=0.7) -> dict:
             return parsed_json 
             
         except json.JSONDecodeError as e:
-            # Jika json terpotong, coba lagi, JANGAN langsung kembalikan {}
             if attempt < max_retries - 1:
                 time.sleep(5)
                 continue
@@ -120,7 +117,7 @@ def get_aggregated_sinkronisasi_context(all_chapters_data):
     return ""
 
 # ==============================================================================
-# PROMPT MODUL AJAR (DIPISAH MENJADI 5 TAHAP)
+# PROMPT MODUL AJAR 
 # ==============================================================================
 def prompt_step_1(form, bab_name):
     return f"""Kamu pakar Kurikulum Merdeka KBC. Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik Utama dan Sub-Bab: {bab_name}. 
@@ -128,12 +125,12 @@ PENTING: CP dan TP WAJIB mengacu "KMA 1503 Tahun 2025". Masukkan rincian Sub-Bab
 Balas HANYA JSON:
 {{"identifikasi": {{"pengetahuan_awal": ["str"], "minat_belajar": ["str"], "latar_belakang": "str (1 paragraf panjang)", "kebutuhan_belajar": ["str"], "dimensi_profil": ["str"], "panca_cinta": ["str"]}}, "desain": {{"capaian_pembelajaran": "str", "tujuan_pembelajaran": ["str"], "lintas_disiplin": ["str"], "topik_pembelajaran": ["Rincian Sub-Bab dari judul..."], "praktik_pedagogi": ["str"], "lingkungan_belajar": ["str"], "kemitraan_pembelajaran": ["str"], "pemanfaatan_digital": ["str"]}}}}"""
 
-# TAHAP 2: DI-LOOPING PER PERTEMUAN (AMPUH UNTUK BAB 2)
+# PENAMBAHAN WAKTU PADA KEGIATAN INTI
 def prompt_step_2_per_pertemuan(form, bab_name, p_ke):
     return f"""Rancang Pengalaman Belajar Modul Ajar Mapel {form['mapel']}, Bab: {bab_name}.
 KHUSUS UNTUK PERTEMUAN KE-{p_ke} SAJA.
 Balas HANYA JSON:
-{{"nomor": {p_ke}, "materi": "Sub-Bab Spesifik Pertemuan Ini", "durasi": "1 x 35 Menit", "pembukaan": {{"waktu": "5'", "aktivitas": ["str", "str"]}}, "inti_memahami": {{"sintak_pbl": "Langkah 1: Orientasi", "aktivitas": ["str", "str"]}}, "inti_mengaplikasikan": {{"sintak_pbl": "Langkah 2: Organisasi", "aktivitas": ["str", "str"]}}, "inti_merefleksikan": {{"sintak_pbl": "Langkah 5: Evaluasi", "aktivitas": ["str", "str"]}}, "penutup": {{"waktu": "5'", "aktivitas": ["str", "str"]}}}}"""
+{{"nomor": {p_ke}, "materi": "Sub-Bab Spesifik Pertemuan Ini", "durasi": "2 x 35 Menit", "pembukaan": {{"waktu": "10'", "aktivitas": ["str", "str"]}}, "inti_memahami": {{"waktu": "20'", "sintak_pbl": "Langkah 1: Orientasi", "aktivitas": ["str", "str"]}}, "inti_mengaplikasikan": {{"waktu": "20'", "sintak_pbl": "Langkah 2: Organisasi", "aktivitas": ["str", "str"]}}, "inti_merefleksikan": {{"waktu": "10'", "sintak_pbl": "Langkah 5: Evaluasi", "aktivitas": ["str", "str"]}}, "penutup": {{"waktu": "10'", "aktivitas": ["str", "str"]}}}}"""
 
 def prompt_step_3(form, bab_name):
     return f"""Tahap 3 modul {form['mapel']} bab {bab_name}. 
@@ -152,7 +149,6 @@ def prompt_step_5(form, bab_name):
 Sediakan 5 Soal Remedial, Pengayaan, Glosarium, dan Pustaka.
 Balas HANYA JSON:
 {{"remedial_pg": [{{"soal": "Pertanyaan PG?", "a": "Opsi A", "b": "Opsi B", "c": "Opsi C", "d": "Opsi D", "kunci": "a"}}], "pengayaan": ["Tugas 1", "Tugas 2"], "glosarium": [{{"istilah": "str", "definisi": "str"}}], "daftar_pustaka": ["Referensi 1", "Referensi 2"]}}"""
-
 
 # ==============================================================================
 # PROMPT KHUSUS LKPD (PERTEMUAN)
@@ -358,7 +354,7 @@ def build_jurnal(form, ai_data):
     buf = io.BytesIO(); doc.save(buf); buf.seek(0); return buf.getvalue()
 
 # ==============================================================================
-# BUILDERS (Cover, Modul, dan LKPD)
+# BUILDERS (Cover, Modul, dan LKPD Per Bab)
 # ==============================================================================
 def build_cover(form: dict, jenis_cover: str) -> bytes:
     is_landscape = (jenis_cover in ["Cover Program Tahunan & Semester", "Cover CP", "Cover ATP"])
@@ -390,12 +386,11 @@ def build_cover(form: dict, jenis_cover: str) -> bytes:
 
 def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data: dict) -> bytes:
     doc = create_base_doc(landscape=False)
-    # Mapping Data 5 Tahap
     d1 = full_data.get("d1", {})
     d2 = full_data.get("d2", {}) # Isinya {"pertemuan": [list_objek]}
-    d3 = full_data.get("d3", {}) # Asesmen & Rubrik
-    d4 = full_data.get("d4", {}) # Materi & LKPD draf
-    d5 = full_data.get("d5", {}) # Remedial, Glosarium, dll
+    d3 = full_data.get("d3", {}) 
+    d4 = full_data.get("d4", {}) 
+    d5 = full_data.get("d5", {}) 
 
     p_head = doc.add_paragraph(); p_head.alignment = WD_ALIGN_PARAGRAPH.CENTER
     r_head1 = p_head.add_run("MODUL AJAR\nKURIKULUM BERBASIS CINTA – PENDEKATAN DEEP LEARNING\n")
@@ -449,7 +444,7 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
             if key not in ["capaian_pembelajaran", "tujuan_pembelajaran"]: p.style = 'List Bullet'
     doc.add_paragraph()
 
-    # TAHAP 2 (LOOPING) DI SINI
+    # TAHAP 2 (LOOPING PERTEMUAN - PERBAIKAN WAKTU)
     doc.add_heading("PENGALAMAN BELAJAR", level=1)
     for p in safe_list(d2.get("pertemuan", [])):
         if not isinstance(p, dict): continue
@@ -457,6 +452,7 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
         doc.add_paragraph(f"PENGALAMAN BELAJAR – PERTEMUAN {no_pert}").bold = True
         doc.add_paragraph(f"Materi: {materi}\nDurasi: {durasi} | Model: PBL | Metode: Ceramah Interaktif, Diskusi Kelompok, Tanya Jawab")
         
+        # Tabel Pembukaan
         t_pem = doc.add_table(rows=2, cols=4); t_pem.style = 'Table Grid'
         t_pem.columns[0].width = Cm(4.0); t_pem.columns[1].width = Cm(9.0); t_pem.columns[2].width = Cm(2.0); t_pem.columns[3].width = Cm(3.0)
         h_pem = t_pem.rows[0].cells
@@ -469,18 +465,25 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
         style_cell(r_pem[2], pem_data.get("waktu", "10'"), center=True); style_cell(r_pem[3], "MEANINGFUL\n(Bermakna)", center=True)
         doc.add_paragraph()
 
-        t_inti = doc.add_table(rows=4, cols=4); t_inti.style = 'Table Grid'
-        t_inti.columns[0].width = Cm(4.0); t_inti.columns[1].width = Cm(4.5); t_inti.columns[2].width = Cm(6.5); t_inti.columns[3].width = Cm(3.0)
+        # Tabel Inti (DITAMBAH KOLOM WAKTU)
+        t_inti = doc.add_table(rows=4, cols=5); t_inti.style = 'Table Grid'
+        t_inti.columns[0].width = Cm(3.0); t_inti.columns[1].width = Cm(3.5); t_inti.columns[2].width = Cm(6.5); t_inti.columns[3].width = Cm(2.0); t_inti.columns[4].width = Cm(3.0)
         h_inti = t_inti.rows[0].cells
-        for i, txt in enumerate(["PENGALAMAN BELAJAR", "SINTAK PBL", "AKTIVITAS PEMBELAJARAN (KEGIATAN INTI)", "PRINSIP DL"]): style_cell(h_inti[i], txt, bold=True, center=True); set_cell_background(h_inti[i], "EFEFEF")
+        for i, txt in enumerate(["PENGALAMAN BELAJAR", "SINTAK PBL", "AKTIVITAS PEMBELAJARAN (KEGIATAN INTI)", "WAKTU", "PRINSIP DL"]): 
+            style_cell(h_inti[i], txt, bold=True, center=True); set_cell_background(h_inti[i], "EFEFEF")
         inti_phases = [("MEMAHAMI", p.get("inti_memahami", {}), "MINDFUL\n(Berkesadaran)"), ("MENGAPLIKASIKAN", p.get("inti_mengaplikasikan", {}), "JOYFUL\n(Menggembirakan)"), ("MEREFLEKSIKAN", p.get("inti_merefleksikan", {}), "MEANINGFUL\n(Bermakna)")]
         for idx, (nama_fase, data_fase, prinsip) in enumerate(inti_phases, 1):
             if not isinstance(data_fase, dict): data_fase = {}
             r_i = t_inti.rows[idx].cells
-            style_cell(r_i[0], nama_fase, bold=True); r_i[1].text = data_fase.get("sintak_pbl", "Langkah PBL")
-            akt_i = "\n".join([f"• {a}" for a in safe_list(data_fase.get("aktivitas"))]); r_i[2].text = akt_i; style_cell(r_i[3], prinsip, center=True)
+            style_cell(r_i[0], nama_fase, bold=True)
+            r_i[1].text = data_fase.get("sintak_pbl", "Langkah PBL")
+            akt_i = "\n".join([f"• {a}" for a in safe_list(data_fase.get("aktivitas"))])
+            r_i[2].text = akt_i
+            style_cell(r_i[3], data_fase.get("waktu", "20'"), center=True) # Menampilkan Waktu
+            style_cell(r_i[4], prinsip, center=True)
         doc.add_paragraph()
         
+        # Tabel Penutup
         t_pen = doc.add_table(rows=2, cols=4); t_pen.style = 'Table Grid'
         t_pen.columns[0].width = Cm(4.0); t_pen.columns[1].width = Cm(9.0); t_pen.columns[2].width = Cm(2.0); t_pen.columns[3].width = Cm(3.0)
         h_pen = t_pen.rows[0].cells
@@ -661,8 +664,8 @@ def build_lkpd_per_bab(form, bab_name, d6_lkpd_data):
 # ==============================================================================
 # UI STREAMLIT 
 # ==============================================================================
-st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4.25")
-st.markdown("*Berbasis Model Lagos AI 9.1 - 5 Tahap & Per-Meeting Loop (Bab Aman 100%)*")
+st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4.26")
+st.markdown("*Berbasis Model Lagos AI 9.1 - Penambahan Alokasi Waktu Inti*")
 
 with st.form("form_modul"):
     col1, col2 = st.columns(2)
