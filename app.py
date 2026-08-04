@@ -1,9 +1,10 @@
 """
 Generator Dokumen Admin Guru MI (KBC & KMA 1503/2025)
 --------------------------------------------------------------------------------
-Pembaruan V4.26 (Time Allocation Fix): 
-Memperbaiki tabel Kegiatan Inti yang sebelumnya tidak memiliki kolom alokasi "WAKTU", 
-serta menginstruksikan AI untuk membagi menit di fase Memahami, Mengaplikasikan, dan Merefleksikan.
+Pembaruan V4.27 (Batching 3 + Waktu Inti Terjaga): 
+1. Mengembalikan sistem "Batching" 3 Pertemuan sekaligus agar proses lebih cepat.
+2. Mempertahankan kolom dan pembagian "WAKTU" pada Fase Inti.
+3. Instruksi JSON yang dioptimalkan untuk mencegah dokumen kosong.
 """
 
 import io
@@ -40,7 +41,7 @@ JENJANG_FASE = {
     "Kelas 12 SMA/MA (Fase F)": "F",
 }
 
-st.set_page_config(page_title="MIFSAL ADMIN GURU V4.26", page_icon="⏱️", layout="wide")
+st.set_page_config(page_title="MIFSAL ADMIN GURU V4.27", page_icon="⚡", layout="wide")
 
 @st.cache_resource
 def get_client():
@@ -50,14 +51,17 @@ def get_client():
         st.stop()
     return OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key)
 
+# FUNGSI PEMANGGIL AI (DENGAN INSTRUKSI JSON ANTI-KOSONG)
 def call_ai(prompt: str, temperature=0.7) -> dict:
     client = get_client()
     max_retries = 5
     
+    safe_prompt = prompt + "\n\n[ATURAN JSON MUTLAK]: Kamu WAJIB membalas HANYA dengan format JSON murni. Gunakan tanda kutip ganda (\") untuk key dan value. TAPI, jika kamu butuh tanda kutip di DALAM isi teks kalimat, gunakan tanda kutip tunggal (') agar struktur JSON tidak rusak."
+    
     for attempt in range(max_retries):
         try:
             response = client.chat.completions.create(
-                model=MODEL_NAME, messages=[{"role": "user", "content": prompt}],
+                model=MODEL_NAME, messages=[{"role": "user", "content": safe_prompt}],
                 temperature=temperature, max_tokens=12192,
             )
             raw_content = response.choices[0].message.content
@@ -84,17 +88,22 @@ def call_ai(prompt: str, temperature=0.7) -> dict:
             return parsed_json 
             
         except json.JSONDecodeError as e:
+            print(f"JSON Cacat di percobaan {attempt+1}: {e}")
             if attempt < max_retries - 1:
                 time.sleep(5)
                 continue
             return {}
         except Exception as e:
             if "429" in str(e) or "Too Many Requests" in str(e):
+                print(f"Terlalu banyak permintaan (429). Menunggu sejenak...")
                 if attempt < max_retries - 1:
                     time.sleep(15)
                     continue
             raise e
     return {}
+
+def create_batches(total_items, batch_size=3):
+    return [list(range(i, min(i + batch_size, total_items + 1))) for i in range(1, total_items + 1, batch_size)]
 
 def get_aggregated_sinkronisasi_context(all_chapters_data):
     sinkron_text = ""
@@ -117,7 +126,7 @@ def get_aggregated_sinkronisasi_context(all_chapters_data):
     return ""
 
 # ==============================================================================
-# PROMPT MODUL AJAR 
+# PROMPT MODUL AJAR (DIPISAH MENJADI 5 TAHAP DENGAN BATCHING)
 # ==============================================================================
 def prompt_step_1(form, bab_name):
     return f"""Kamu pakar Kurikulum Merdeka KBC. Mapel: {form['mapel']}, Jenjang: {form['kelas']}, Topik Utama dan Sub-Bab: {bab_name}. 
@@ -125,12 +134,13 @@ PENTING: CP dan TP WAJIB mengacu "KMA 1503 Tahun 2025". Masukkan rincian Sub-Bab
 Balas HANYA JSON:
 {{"identifikasi": {{"pengetahuan_awal": ["str"], "minat_belajar": ["str"], "latar_belakang": "str (1 paragraf panjang)", "kebutuhan_belajar": ["str"], "dimensi_profil": ["str"], "panca_cinta": ["str"]}}, "desain": {{"capaian_pembelajaran": "str", "tujuan_pembelajaran": ["str"], "lintas_disiplin": ["str"], "topik_pembelajaran": ["Rincian Sub-Bab dari judul..."], "praktik_pedagogi": ["str"], "lingkungan_belajar": ["str"], "kemitraan_pembelajaran": ["str"], "pemanfaatan_digital": ["str"]}}}}"""
 
-# PENAMBAHAN WAKTU PADA KEGIATAN INTI
-def prompt_step_2_per_pertemuan(form, bab_name, p_ke):
+# TAHAP 2: DI-BATCH PER 3 PERTEMUAN (DENGAN WAKTU)
+def prompt_step_2_batch(form, bab_name, batch_list):
     return f"""Rancang Pengalaman Belajar Modul Ajar Mapel {form['mapel']}, Bab: {bab_name}.
-KHUSUS UNTUK PERTEMUAN KE-{p_ke} SAJA.
-Balas HANYA JSON:
-{{"nomor": {p_ke}, "materi": "Sub-Bab Spesifik Pertemuan Ini", "durasi": "2 x 35 Menit", "pembukaan": {{"waktu": "10'", "aktivitas": ["str", "str"]}}, "inti_memahami": {{"waktu": "20'", "sintak_pbl": "Langkah 1: Orientasi", "aktivitas": ["str", "str"]}}, "inti_mengaplikasikan": {{"waktu": "20'", "sintak_pbl": "Langkah 2: Organisasi", "aktivitas": ["str", "str"]}}, "inti_merefleksikan": {{"waktu": "10'", "sintak_pbl": "Langkah 5: Evaluasi", "aktivitas": ["str", "str"]}}, "penutup": {{"waktu": "10'", "aktivitas": ["str", "str"]}}}}"""
+KHUSUS UNTUK PERTEMUAN KE-{batch_list}.
+Buat aktivitas berurutan untuk pertemuan {batch_list} di dalam array 'pertemuan'.
+Balas HANYA JSON dengan struktur list objek:
+{{"pertemuan": [{{"nomor": {batch_list[0]}, "materi": "Nama Sub-Bab spesifik", "durasi": "2 x 35 Menit", "pembukaan": {{"waktu": "10'", "aktivitas": ["Langkah guru & siswa 1"]}}, "inti_memahami": {{"waktu": "20'", "sintak_pbl": "Langkah 1: Orientasi", "aktivitas": ["Aktivitas spesifik 1"]}}, "inti_mengaplikasikan": {{"waktu": "20'", "sintak_pbl": "Langkah 2: Organisasi", "aktivitas": ["Tugas spesifik 1"]}}, "inti_merefleksikan": {{"waktu": "10'", "sintak_pbl": "Langkah 5: Evaluasi", "aktivitas": ["Refleksi spesifik 1"]}}, "penutup": {{"waktu": "10'", "aktivitas": ["Kesimpulan spesifik"]}}}}]}}"""
 
 def prompt_step_3(form, bab_name):
     return f"""Tahap 3 modul {form['mapel']} bab {bab_name}. 
@@ -150,14 +160,15 @@ Sediakan 5 Soal Remedial, Pengayaan, Glosarium, dan Pustaka.
 Balas HANYA JSON:
 {{"remedial_pg": [{{"soal": "Pertanyaan PG?", "a": "Opsi A", "b": "Opsi B", "c": "Opsi C", "d": "Opsi D", "kunci": "a"}}], "pengayaan": ["Tugas 1", "Tugas 2"], "glosarium": [{{"istilah": "str", "definisi": "str"}}], "daftar_pustaka": ["Referensi 1", "Referensi 2"]}}"""
 
+
 # ==============================================================================
-# PROMPT KHUSUS LKPD (PERTEMUAN)
+# PROMPT KHUSUS LKPD (BATCHING)
 # ==============================================================================
-def prompt_lkpd_interaktif_per_pertemuan(form, bab_name, pertemuan_ke):
-    return f"""Buat LKPD Interaktif untuk Mapel {form['mapel']} {form['kelas']} Topik {bab_name}, KHUSUS UNTUK PERTEMUAN KE-{pertemuan_ke} SAJA.
-Pastikan materi LKPD ini nyambung dengan urutan Sub-Bab untuk pertemuan tersebut.
+def prompt_lkpd_interaktif_batch(form, bab_name, batch_list):
+    return f"""Buat LKPD Interaktif untuk Mapel {form['mapel']} {form['kelas']} Topik {bab_name}, KHUSUS UNTUK PERTEMUAN KE-{batch_list}.
+Pastikan membuat LKPD terpisah untuk setiap pertemuan di dalam array 'lkpd'.
 Balas HANYA JSON:
-{{"lkpd": {{"pertemuan": {pertemuan_ke}, "topik_judul": "Topik Pertemuan {pertemuan_ke}: [Nama Sub-Bab]", "tujuan_pembelajaran": ["Memahami..."], "aktivitas": [{{"judul_aktivitas": "Aktivitas 1: Kisah/Konteks", "konteks": "Bayangkan kamu sedang...", "ayo_berpikir": ["Langkah 1...", "Langkah 2..."], "koneksi_matematika": ["Kalimat matematika...", "Bandingkan..."], "kesimpulan": "Artinya adalah...", "latihan_berpikir": "Kasus untuk siswa..."}}]}}}}"""
+{{"lkpd": [{{"pertemuan": {batch_list[0]}, "topik_judul": "Topik Pertemuan {batch_list[0]}: [Nama Sub-Bab]", "tujuan_pembelajaran": ["Memahami..."], "aktivitas": [{{"judul_aktivitas": "Aktivitas 1: Kisah/Konteks", "konteks": "Bayangkan kamu sedang...", "ayo_berpikir": ["Langkah 1..."], "koneksi_matematika": ["Kalimat matematika..."], "kesimpulan": "Artinya adalah...", "latihan_berpikir": "Kasus untuk siswa..."}}]}}]}}"""
 
 
 # ==============================================================================
@@ -191,8 +202,17 @@ def generate_jurnal_otomatis(form, all_chapters_data):
         for p in pertemuan_list:
             if not isinstance(p, dict): continue
             topik_materi = p.get("materi", bab_name) 
-            akt = p.get("inti_mengaplikasikan", {}).get("aktivitas", ["Pembelajaran KBC"])
-            aktivitas_utama = str(akt[0]) if isinstance(akt, list) and len(akt) > 0 else str(akt)
+            
+            akt_utama = "Kegiatan Pembelajaran (KBC)"
+            if "inti_mengaplikasikan" in p and "aktivitas" in p["inti_mengaplikasikan"]:
+                akt = p["inti_mengaplikasikan"]["aktivitas"]
+                if isinstance(akt, list) and len(akt) > 0: akt_utama = str(akt[0])
+                else: akt_utama = str(akt)
+            elif "aktivitas" in p:
+                akt = p["aktivitas"]
+                if isinstance(akt, list) and len(akt) > 0: akt_utama = str(akt[0])
+                else: akt_utama = str(akt)
+                
             jurnal_rows.append({"pertemuan": str(pertemuan_global), "topik": topik_materi, "aktivitas": aktivitas_utama, "asesmen": "Formatif/Lisan/Penugasan"})
             pertemuan_global += 1
     return {"rows": jurnal_rows}
@@ -444,7 +464,7 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
             if key not in ["capaian_pembelajaran", "tujuan_pembelajaran"]: p.style = 'List Bullet'
     doc.add_paragraph()
 
-    # TAHAP 2 (LOOPING PERTEMUAN - PERBAIKAN WAKTU)
+    # TAHAP 2: DI BATCH, MENGANDUNG WAKTU PADA INTI
     doc.add_heading("PENGALAMAN BELAJAR", level=1)
     for p in safe_list(d2.get("pertemuan", [])):
         if not isinstance(p, dict): continue
@@ -465,7 +485,7 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
         style_cell(r_pem[2], pem_data.get("waktu", "10'"), center=True); style_cell(r_pem[3], "MEANINGFUL\n(Bermakna)", center=True)
         doc.add_paragraph()
 
-        # Tabel Inti (DITAMBAH KOLOM WAKTU)
+        # Tabel Inti DENGAN Kolom Waktu
         t_inti = doc.add_table(rows=4, cols=5); t_inti.style = 'Table Grid'
         t_inti.columns[0].width = Cm(3.0); t_inti.columns[1].width = Cm(3.5); t_inti.columns[2].width = Cm(6.5); t_inti.columns[3].width = Cm(2.0); t_inti.columns[4].width = Cm(3.0)
         h_inti = t_inti.rows[0].cells
@@ -479,7 +499,7 @@ def build_modul_ajar(form: dict, bab_name: str, jumlah_pertemuan: int, full_data
             r_i[1].text = data_fase.get("sintak_pbl", "Langkah PBL")
             akt_i = "\n".join([f"• {a}" for a in safe_list(data_fase.get("aktivitas"))])
             r_i[2].text = akt_i
-            style_cell(r_i[3], data_fase.get("waktu", "20'"), center=True) # Menampilkan Waktu
+            style_cell(r_i[3], data_fase.get("waktu", "20'"), center=True)
             style_cell(r_i[4], prinsip, center=True)
         doc.add_paragraph()
         
@@ -664,8 +684,8 @@ def build_lkpd_per_bab(form, bab_name, d6_lkpd_data):
 # ==============================================================================
 # UI STREAMLIT 
 # ==============================================================================
-st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4.26")
-st.markdown("*Berbasis Model Lagos AI 9.1 - Penambahan Alokasi Waktu Inti*")
+st.title("📘 MI MIFTAHUSSALAM ADMIN GURU GENERATOR V.4.27")
+st.markdown("*Berbasis Model Lagos AI 9.1 - Fast Batching & Time Columns Fix*")
 
 with st.form("form_modul"):
     col1, col2 = st.columns(2)
@@ -747,12 +767,15 @@ if submitted:
                 st.info("Tahap 1: Desain Pembelajaran Modul...")
                 d1_ctx = call_ai(prompt_step_1(form, bab_name)); time.sleep(3)
                 
-                # --- TAHAP 2 (LOOPING PER PERTEMUAN) ---
+                # --- TAHAP 2 (BATCHING PER 3 PERTEMUAN) ---
                 d2_list = []
-                for p_ke in range(1, jml_pert + 1):
-                    st.info(f"Tahap 2: Pengalaman Belajar (Pertemuan {p_ke}/{jml_pert})...")
-                    resp = call_ai(prompt_step_2_per_pertemuan(form, bab_name, p_ke))
-                    if resp: d2_list.append(resp)
+                batches = create_batches(jml_pert, 3) 
+                
+                for batch in batches:
+                    st.info(f"Tahap 2: Pengalaman Belajar Modul (Memproses Pertemuan {batch})...")
+                    resp = call_ai(prompt_step_2_batch(form, bab_name, batch))
+                    raw_p = resp.get("pertemuan", [])
+                    if isinstance(raw_p, list): d2_list.extend(raw_p)
                     time.sleep(3)
                 d2_ctx = {"pertemuan": d2_list}
 
@@ -775,12 +798,12 @@ if submitted:
                     
                 if "LKPD Siswa (Per Bab)" in pilihan_dokumen:
                     combined_lkpd_list = []
-                    for p_ke in range(1, jml_pert + 1):
-                        st.info(f"Tahap Khusus: Pembuatan LKPD Interaktif (Pertemuan {p_ke}/{jml_pert})...")
-                        lkpd_resp = call_ai(prompt_lkpd_interaktif_per_pertemuan(form, bab_name, p_ke))
-                        raw_lkpd = lkpd_resp.get("lkpd")
-                        if isinstance(raw_lkpd, list) and len(raw_lkpd) > 0: combined_lkpd_list.append(raw_lkpd[0])
-                        elif isinstance(raw_lkpd, dict): combined_lkpd_list.append(raw_lkpd)
+                    # BATCHING JUGA DITERAPKAN DI LKPD
+                    for batch in batches:
+                        st.info(f"Tahap Khusus: Pembuatan LKPD Interaktif (Memproses Pertemuan {batch})...")
+                        lkpd_resp = call_ai(prompt_lkpd_interaktif_batch(form, bab_name, batch))
+                        raw_lkpd = lkpd_resp.get("lkpd", [])
+                        if isinstance(raw_lkpd, list): combined_lkpd_list.extend(raw_lkpd)
                         time.sleep(3)
                         
                     d6_combined_ctx = {"lkpd": combined_lkpd_list}
