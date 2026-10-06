@@ -24,15 +24,22 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
 # ==============================================================================
+# KONFIGURASI API & MODEL (DIPERBARUI)
+# ==============================================================================
+# Pastikan nama model ini didukung oleh server pecuti.my.id
+MODEL_NAME = "google/diffusiongemma-26b-a4b-it" 
+
+# Base URL hanya sampai /v1 (OpenAI library akan otomatis menambahkan /chat/completions)
+BASE_URL = "https://pecuti.my.id/v1"
+API_KEY = "sk-pec-6f5471b982ce800e14446e08ca2c09a34fcbe9d9b6bc96ea"
+
+# ==============================================================================
 # PALET WARNA JOYFUL 
 # ==============================================================================
 COLOR_TITLE = "6C5CE7"       
 COLOR_IDENTITY_HEAD = "0984E3"   
 COLOR_LABEL = "DEEAF1"       
 COLOR_VALUE = "FFFFFF"       
-
-MODEL_NAME = "z-ai/glm-5-3-flash"
-NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 JENJANG_FASE = {
     "RA/TK (Fase Fondasi)": "Fondasi", "Kelas 1 SD/MI (Fase A)": "A", "Kelas 2 SD/MI (Fase A)": "A",
@@ -46,11 +53,12 @@ st.set_page_config(page_title="MIFSAL ADMIN GURU V4.29", page_icon="⏱️", lay
 
 @st.cache_resource
 def get_client():
-    api_key = st.secrets.get("NVIDIA_API_KEY")
+    # Menggunakan API_KEY yang sudah didefinisikan di atas
+    api_key = API_KEY
     if not api_key:
-        st.error("NVIDIA_API_KEY belum ada di st.secrets.")
+        st.error("API_KEY belum dikonfigurasi.")
         st.stop()
-    return OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key)
+    return OpenAI(base_url=BASE_URL, api_key=api_key)
 
 # KALKULATOR MATEMATIKA UNTUK JP DAN WAKTU (MENCEGAH AI SALAH HITUNG)
 def parse_jp_menit(alokasi_str):
