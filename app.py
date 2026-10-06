@@ -32,7 +32,7 @@ COLOR_LABEL = "DEEAF1"
 COLOR_VALUE = "FFFFFF"       
 
 MODEL_NAME = "google/diffusiongemma-26b-a4b-it"
-NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
+NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 JENJANG_FASE = {
     "RA/TK (Fase Fondasi)": "Fondasi", "Kelas 1 SD/MI (Fase A)": "A", "Kelas 2 SD/MI (Fase A)": "A",
