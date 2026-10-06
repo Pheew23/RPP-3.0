@@ -27,7 +27,7 @@ from docx.oxml import OxmlElement
 # KONFIGURASI API & MODEL (DIPERBARUI)
 # ==============================================================================
 # Pastikan nama model ini didukung oleh server pecuti.my.id
-MODEL_NAME = "google/diffusiongemma-26b-a4b-it" 
+MODEL_NAME = "pecuti/deepseek-v4.1-flash" 
 
 # Base URL hanya sampai /v1 (OpenAI library akan otomatis menambahkan /chat/completions)
 BASE_URL = "https://pecuti.my.id/v1"
